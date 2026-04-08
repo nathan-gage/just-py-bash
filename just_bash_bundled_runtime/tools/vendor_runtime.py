@@ -15,6 +15,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+PACKAGE_DIR = Path(__file__).resolve().parents[1]
+
 
 @dataclass(frozen=True, slots=True)
 class NodeTarget:
@@ -171,8 +173,8 @@ def main() -> int:
     parser.add_argument(
         "--package-dir",
         type=Path,
-        default=Path("just_bash_bundled_runtime"),
-        help="Path to the just-bash-bundled-runtime package directory",
+        default=PACKAGE_DIR,
+        help="Path to the just-bash-bundled-runtime package directory (default: this package)",
     )
     args = parser.parse_args()
 

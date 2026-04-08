@@ -12,7 +12,7 @@ This roadmap was prepared by reviewing:
 - `README.md`
 - `pyproject.toml`
 - `Makefile`
-- `scripts/build-packaged-runtime.sh`
+- `just_py_bash/tools/build_packaged_runtime.sh`
 
 ## Current snapshot
 
@@ -62,7 +62,7 @@ Coverage is only one signal. For this project, the strongest confidence comes fr
 | Public CLI (`just-py-bash`) | Implemented | Smoke-only | Packaging tests only | Only a basic installed-console-script path is covered. Option parsing is not. |
 | Packaged wheel runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
 | Packaged sdist runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
-| Packaged runtime for optional Python/JS assets | Implemented by build script | None | Not exercised in installed-wheel/sdist tests | `scripts/build-packaged-runtime.sh` prepares these assets, but distribution tests do not verify them. |
+| Packaged runtime for optional Python/JS assets | Implemented by build script | None | Not exercised in installed-wheel/sdist tests | `just_py_bash/tools/build_packaged_runtime.sh` prepares these assets, but distribution tests do not verify them. |
 | Low-level upstream fs classes (`OverlayFs`, `ReadWriteFs`, `MountableFs`) | Not implemented | Planned | N/A | Explicitly called out as missing in README/examples. |
 | Low-level fs API surface (`stat`, `readdir`, `mkdir`, `rm`, etc.) | Not implemented | Planned | N/A | Current Python wrapper only exposes session helpers plus read/write convenience methods. |
 | Upstream `fetch`, `logger`, `trace`, `defenseInDepth`, `coverage` options | Not implemented | Planned | N/A | No Python equivalents yet. |
@@ -97,7 +97,7 @@ The current design is solid and intentionally simple:
 The repo already has a credible packaging story:
 
 - a packaged backend is built into `just_py_bash/src/just_py_bash/_vendor/just-bash`
-- `scripts/build-packaged-runtime.sh` bundles upstream runtime artifacts, worker files, WASM payloads, and package metadata
+- `just_py_bash/tools/build_packaged_runtime.sh` bundles upstream runtime artifacts, worker files, WASM payloads, and package metadata
 - wheel/sdist installation is tested from isolated virtual environments with no repo checkout
 
 ### Testing story

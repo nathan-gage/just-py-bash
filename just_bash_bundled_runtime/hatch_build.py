@@ -10,8 +10,7 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 _PACKAGE_DIR = Path("src") / "just_bash_bundled_runtime"
 _RUNTIME_MISSING_MESSAGE = (
-    "Bundled Node runtime is missing. "
-    "Run `python scripts/vendor_node_provider.py --package-dir just_bash_bundled_runtime` first."
+    "Bundled Node runtime is missing. Run `python just_bash_bundled_runtime/tools/vendor_runtime.py` first."
 )
 _HOST_PLATFORM_PREFIX = {
     "darwin": "darwin",

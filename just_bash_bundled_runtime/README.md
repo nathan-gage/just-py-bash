@@ -8,7 +8,7 @@ The package now builds with Hatchling and emits platform-specific `py3-none-<pla
 Populate the local runtime payload:
 
 ```bash
-python scripts/vendor_node_provider.py --package-dir just_bash_bundled_runtime
+python just_bash_bundled_runtime/tools/vendor_runtime.py
 ```
 
 Build a wheel from the repository root:
