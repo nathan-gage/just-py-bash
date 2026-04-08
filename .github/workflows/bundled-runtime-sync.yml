@@ -31,7 +31,7 @@ jobs:
           esac
 
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
           ref: main
@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.0.0
         with:
           python-version: "3.11"
           enable-cache: true
@@ -66,7 +66,7 @@ jobs:
 
       - name: Create pull request
         if: steps.sync.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v6.1.0
         with:
           branch: automation/sync-bundled-runtime
           delete-branch: true

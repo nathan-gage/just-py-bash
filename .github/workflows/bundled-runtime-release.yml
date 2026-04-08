@@ -35,7 +35,7 @@ jobs:
           esac
 
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
           ref: main
@@ -103,14 +103,14 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
           ref: ${{ needs.detect.outputs.ref }}
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.0.0
         with:
           python-version: "3.11"
           enable-cache: true
@@ -147,7 +147,7 @@ jobs:
           PY
 
       - name: Upload bundled runtime wheel artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v6.0.0
         with:
           name: bundled-runtime-${{ matrix.os }}
           path: dist-node/*
@@ -167,21 +167,21 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
           ref: ${{ needs.detect.outputs.ref }}
           persist-credentials: false
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.0.0
         with:
           python-version: "3.11"
           enable-cache: true
           cache-suffix: bundled-runtime-release
 
       - name: Download wheel artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v8.0.1
         with:
           pattern: bundled-runtime-*
           merge-multiple: true
