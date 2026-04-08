@@ -20,6 +20,18 @@ function encodeBytes(value) {
   return { [BYTE_TAG]: Buffer.from(value).toString('base64') };
 }
 
+function wrapSuccess(value) {
+  return { kind: 'ok', value };
+}
+
+function normalizeError(error) {
+  return {
+    kind: 'error',
+    type: error?.name ?? 'Error',
+    message: error?.message ?? String(error),
+  };
+}
+
 function decodeFileContent(value) {
   if (typeof value === 'string') {
     return value;
@@ -106,44 +118,52 @@ const packageJson = JSON.parse(await readFile(request.packageJson, 'utf8'));
 
 const results = [];
 for (const operation of request.operations) {
-  switch (operation.op) {
-    case 'exec':
-      results.push(
-        await execWithTimeout(
-          bash,
-          operation.script,
-          decodeExecOptions(operation.options ?? {}),
-        ),
-      );
-      break;
-    case 'read_text':
-      results.push(await bash.readFile(operation.path));
-      break;
-    case 'read_bytes':
-      results.push(
-        encodeBytes(
-          await bash.fs.readFileBuffer(
-            bash.fs.resolvePath(bash.getCwd(), operation.path),
+  try {
+    switch (operation.op) {
+      case 'exec':
+        results.push(
+          wrapSuccess(
+            await execWithTimeout(
+              bash,
+              operation.script,
+              decodeExecOptions(operation.options ?? {}),
+            ),
           ),
-        ),
-      );
-      break;
-    case 'write_text':
-      await bash.writeFile(operation.path, operation.content);
-      results.push(null);
-      break;
-    case 'write_bytes':
-      await bash.writeFile(operation.path, decodeBytes(operation.content));
-      results.push(null);
-      break;
-    case 'get_env':
-      results.push(bash.getEnv());
-      break;
-    case 'get_cwd':
-      results.push(bash.getCwd());
-      break;
-    default:
-      throw new Error(`Unknown operation: ${operation.op}`);
+        );
+        break;
+      case 'read_text':
+        results.push(wrapSuccess(await bash.readFile(operation.path)));
+        break;
+      case 'read_bytes':
+        results.push(
+          wrapSuccess(
+            encodeBytes(
+              await bash.fs.readFileBuffer(
+                bash.fs.resolvePath(bash.getCwd(), operation.path),
+              ),
+            ),
+          ),
+        );
+        break;
+      case 'write_text':
+        await bash.writeFile(operation.path, operation.content);
+        results.push(wrapSuccess(null));
+        break;
+      case 'write_bytes':
+        await bash.writeFile(operation.path, decodeBytes(operation.content));
+        results.push(wrapSuccess(null));
+        break;
+      case 'get_env':
+        results.push(wrapSuccess(bash.getEnv()));
+        break;
+      case 'get_cwd':
+        results.push(wrapSuccess(bash.getCwd()));
+        break;
+      default:
+        throw new Error(`Unknown operation: ${operation.op}`);
+    }
+  } catch (error) {
+    results.push(normalizeError(error));
   }
 }
 
