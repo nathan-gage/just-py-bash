@@ -1,3 +1,0 @@
-include README.md
-recursive-include src/just_bash_bundled_runtime *.json py.typed
-recursive-include src/just_bash_bundled_runtime/runtime *

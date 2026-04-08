@@ -29,7 +29,7 @@ just-bash-bundled-runtime = { path = "just_bash_bundled_runtime", editable = tru
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-include = ["just_py_bash/src/**/*.py", "just_bash_bundled_runtime/src/**/*.py", "tests/**/*.py", "scripts/**/*.py"]
+include = ["just_py_bash/src/**/*.py", "just_bash_bundled_runtime/src/**/*.py", "just_bash_bundled_runtime/hatch_build.py", "tests/**/*.py", "scripts/**/*.py"]
 extend-exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime"]
 
 [tool.ruff.lint]

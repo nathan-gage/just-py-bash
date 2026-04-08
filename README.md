@@ -299,7 +299,7 @@ make install
 make test
 ```
 
-`make install` installs the Python dependencies and bootstraps the vendored `vendor/just-bash` backend. If you also want to build the first-party bundled Node companion package locally, run `make build-bundled-runtime` (or the backward-compatible alias `make build-node-provider`). Run `make help` to see the other available development commands.
+`make install` installs the Python dependencies and bootstraps the vendored `vendor/just-bash` backend. If you also want to build the first-party bundled Node companion package locally, run `make build-bundled-runtime`. Run `make help` to see the other available development commands.
 
 ## Conformance Testing
 

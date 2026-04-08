@@ -3,6 +3,7 @@
 This directory contains the first-party bundled Node.js runtime provider used by `just-py-bash[node]`.
 
 The packaged runtime is built from official Node.js release archives and verified against upstream `SHASUMS256.txt`.
+The package now builds with Hatchling and emits platform-specific `py3-none-<platform>` wheels based on the vendored runtime payload.
 
 Populate the local runtime payload:
 

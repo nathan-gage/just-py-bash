@@ -16,19 +16,28 @@ classifiers = [
 ]
 
 [build-system]
-requires = ["setuptools>=80", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.29.0"]
+build-backend = "hatchling.build"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-include-package-data = true
+[tool.hatch.build]
+artifacts = [
+    "src/just_bash_bundled_runtime/runtime/**",
+    "src/just_bash_bundled_runtime/runtime-metadata.json",
+]
+exclude = [
+    "src/just_bash_bundled_runtime/__pycache__/**",
+]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
-[tool.setuptools.package-data]
-just_bash_bundled_runtime = [
-    "py.typed",
-    "runtime/**/*",
-    "runtime-metadata.json",
+[tool.hatch.build.targets.wheel]
+packages = ["src/just_bash_bundled_runtime"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "README.md",
+    "pyproject.toml",
+    "hatch_build.py",
+    "src/just_bash_bundled_runtime/**",
 ]

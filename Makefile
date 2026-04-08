@@ -30,15 +30,9 @@ setup: install ## Backward-compatible alias for install
 vendor-bundled-runtime: .uv ## Download and verify the official Node runtime for just_bash_bundled_runtime
 	uv run python scripts/vendor_node_provider.py --package-dir just_bash_bundled_runtime
 
-.PHONY: vendor-node-provider
-vendor-node-provider: vendor-bundled-runtime ## Backward-compatible alias for vendor-bundled-runtime
-
 .PHONY: build-bundled-runtime
 build-bundled-runtime: vendor-bundled-runtime ## Build a wheel for just_bash_bundled_runtime
 	uv build just_bash_bundled_runtime --wheel --out-dir dist-node
-
-.PHONY: build-node-provider
-build-node-provider: build-bundled-runtime ## Backward-compatible alias for build-bundled-runtime
 
 .PHONY: format
 format: ## Format the code

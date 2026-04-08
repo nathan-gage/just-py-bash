@@ -14,6 +14,7 @@ import pytest
 from tests.support.harness import ROOT
 
 PACKAGE_ROOT = ROOT / "just_py_bash"
+RUNTIME_PACKAGE_ROOT = ROOT / "just_bash_bundled_runtime"
 
 pytestmark = [
     pytest.mark.contract,
@@ -42,12 +43,12 @@ def venv_bin_dir(venv_dir: Path) -> Path:
     return venv_dir / "bin"
 
 
-def build_distribution(kind: str, dist_dir: Path) -> Path:
+def build_distribution(kind: str, dist_dir: Path, *, package_root: Path = PACKAGE_ROOT) -> Path:
     uv = shutil.which("uv")
     if not uv:
         raise NotImplementedError("uv is required to exercise the packaging flow")
 
-    command = [uv, "build", str(PACKAGE_ROOT), f"--{kind}", "--out-dir", str(dist_dir)]
+    command = [uv, "build", str(package_root), f"--{kind}", "--out-dir", str(dist_dir)]
     completed = subprocess.run(
         command,
         cwd=ROOT,
@@ -233,3 +234,44 @@ def test_wheel_declares_explicit_node_extra(tmp_path: Path) -> None:
 
     assert "Provides-Extra: node" in metadata
     assert "Requires-Dist: just-bash-bundled-runtime>=22,<23 ; extra == 'node'" in metadata
+
+
+def test_bundled_runtime_wheel_is_platform_specific_and_installs(tmp_path: Path) -> None:
+    wheel = build_distribution("wheel", tmp_path / "runtime-dist", package_root=RUNTIME_PACKAGE_ROOT)
+
+    assert "-py3-none-" in wheel.name
+    assert not wheel.name.endswith("-any.whl")
+
+    with zipfile.ZipFile(wheel) as archive:
+        wheel_name = next(name for name in archive.namelist() if name.endswith(".dist-info/WHEEL"))
+        wheel_metadata = archive.read(wheel_name).decode("utf-8")
+        archived_names = set(archive.namelist())
+
+    expected_node_path = (
+        "just_bash_bundled_runtime/runtime/node.exe"
+        if sys.platform == "win32"
+        else "just_bash_bundled_runtime/runtime/bin/node"
+    )
+
+    assert "Generator: hatchling" in wheel_metadata
+    assert "Root-Is-Purelib: false" in wheel_metadata
+    assert expected_node_path in archived_names
+    assert "just_bash_bundled_runtime/runtime-metadata.json" in archived_names
+
+    installed = install_distribution(wheel, tmp_path / "runtime-install")
+    completed = run_installed_python(
+        installed,
+        (
+            "import json, subprocess; "
+            "from just_bash_bundled_runtime import get_node_executable, get_runtime_metadata; "
+            "metadata = get_runtime_metadata(); "
+            "completed = subprocess.run([str(get_node_executable()), '--version'], text=True, capture_output=True, check=False); "
+            "print(json.dumps({'code': completed.returncode, 'version': completed.stdout.strip(), 'metadata': metadata}))"
+        ),
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["code"] == 0
+    assert payload["metadata"]["platform"]
+    assert payload["version"] == f"v{payload['metadata']['node_version']}"
