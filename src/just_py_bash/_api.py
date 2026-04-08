@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from typing import Self
 
-from ._bridge import NodeBridge, decode_bytes_payload, encode_file_value
+from ._bridge import NodeBridge
+from ._codec import decode_bytes_payload, encode_file_value
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
-from ._types import ExecOptionsWire, FileValue, InitOptionsWire, NetworkConfig, ProcessInfo
+from ._options import BashOptions, ExecOptions
+from ._types import FileValue, NetworkConfig, ProcessInfo
 
 
 class Bash:
@@ -17,6 +20,10 @@ class Bash:
     just-bash semantics are preserved:
     - filesystem state is shared across ``exec`` calls
     - shell state is isolated per ``exec`` call
+
+    The keyword-heavy constructor is retained for backward compatibility.
+    New code can use :meth:`from_options` and :meth:`exec_with_options` to work
+    with explicit option models instead.
     """
 
     def __init__(
@@ -32,29 +39,20 @@ class Bash:
         network: NetworkConfig | None = None,
         process_info: ProcessInfo | None = None,
         node_command: Sequence[str] | None = None,
-        js_entry: str | None = None,
-        package_json: str | None = None,
+        js_entry: str | os.PathLike[str] | None = None,
+        package_json: str | os.PathLike[str] | None = None,
     ) -> None:
-        init_options: InitOptionsWire = {}
-
-        if files is not None:
-            init_options["files"] = {path: encode_file_value(content) for path, content in files.items()}
-        if env is not None:
-            init_options["env"] = dict(env)
-        if cwd is not None:
-            init_options["cwd"] = cwd
-        if execution_limits is not None:
-            init_options["executionLimits"] = execution_limits.to_wire()
-        if python:
-            init_options["python"] = True
-        if javascript:
-            init_options["javascript"] = javascript.to_wire() if isinstance(javascript, JavaScriptConfig) else True
-        if commands is not None:
-            init_options["commands"] = list(commands)
-        if network is not None:
-            init_options["network"] = network
-        if process_info is not None:
-            init_options["processInfo"] = process_info
+        init_options = BashOptions(
+            files=files,
+            env=env,
+            cwd=cwd,
+            execution_limits=execution_limits,
+            python=python,
+            javascript=javascript,
+            commands=commands,
+            network=network,
+            process_info=process_info,
+        ).to_wire()
 
         self._bridge = NodeBridge(
             init_options=init_options,
@@ -63,6 +61,30 @@ class Bash:
             package_json=package_json,
         )
         self.backend_version = self._bridge.backend_version
+
+    @classmethod
+    def from_options(
+        cls,
+        options: BashOptions,
+        *,
+        node_command: Sequence[str] | None = None,
+        js_entry: str | os.PathLike[str] | None = None,
+        package_json: str | os.PathLike[str] | None = None,
+    ) -> Self:
+        return cls(
+            files=options.files,
+            env=options.env,
+            cwd=options.cwd,
+            execution_limits=options.execution_limits,
+            python=options.python,
+            javascript=options.javascript,
+            commands=options.commands,
+            network=options.network,
+            process_info=options.process_info,
+            node_command=node_command,
+            js_entry=js_entry,
+            package_json=package_json,
+        )
 
     def __enter__(self) -> Self:
         return self
@@ -89,29 +111,27 @@ class Bash:
         args: Sequence[str] | None = None,
         timeout: float | None = None,
     ) -> ExecResult:
-        options: ExecOptionsWire = {}
-        if env is not None:
-            options["env"] = dict(env)
-        if replace_env:
-            options["replaceEnv"] = True
-        if cwd is not None:
-            options["cwd"] = cwd
-        if raw_script:
-            options["rawScript"] = True
-        if stdin is not None:
-            options["stdin"] = stdin
-        if args is not None:
-            options["args"] = list(args)
-        if timeout is not None:
-            options["timeoutMs"] = max(1, int(timeout * 1000))
+        return self.exec_with_options(
+            command_line,
+            ExecOptions(
+                env=env,
+                replace_env=replace_env,
+                cwd=cwd,
+                raw_script=raw_script,
+                stdin=stdin,
+                args=args,
+                timeout=timeout,
+            ),
+        )
 
+    def exec_with_options(self, command_line: str, options: ExecOptions) -> ExecResult:
         payload = self._bridge.request(
             "exec",
             {
                 "script": command_line,
-                "options": options,
+                "options": options.to_wire(),
             },
-            timeout=None if timeout is None else timeout + 5.0,
+            timeout=None if options.timeout is None else options.timeout + 5.0,
         )
         return ExecResult.from_wire(payload)
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 import os
 import shlex
@@ -22,13 +21,10 @@ from pydantic import TypeAdapter, ValidationError
 
 from ._exceptions import BackendError, BackendUnavailableError, BridgeError, BridgeTimeoutError
 from ._types import (
-    BYTE_TAG,
     BackendErrorPayload,
     BytesPayload,
-    EncodedFileValue,
     ExecRequestPayload,
     ExecResultWire,
-    FileValue,
     InfoResponse,
     InitOptionsWire,
     InitRequestPayload,
@@ -495,21 +491,3 @@ class NodeBridge:
         if stderr:
             message += f":\n{stderr}"
         return message
-
-
-@overload
-def encode_file_value(value: str) -> str: ...
-
-
-@overload
-def encode_file_value(value: bytes) -> BytesPayload: ...
-
-
-def encode_file_value(value: FileValue) -> EncodedFileValue:
-    if isinstance(value, bytes):
-        return {BYTE_TAG: base64.b64encode(value).decode("ascii")}
-    return value
-
-
-def decode_bytes_payload(payload: BytesPayload) -> bytes:
-    return base64.b64decode(payload[BYTE_TAG].encode("ascii"))

@@ -14,6 +14,7 @@ from ._exceptions import (
     JustBashError,
 )
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
+from ._options import BashOptions, ExecOptions
 from ._types import AllowedUrl, AllowedUrlEntry, NetworkConfig, ProcessInfo, RequestTransform
 
 try:
@@ -26,10 +27,12 @@ __all__ = [
     "AllowedUrl",
     "AllowedUrlEntry",
     "BackendError",
+    "BashOptions",
     "BackendUnavailableError",
     "BridgeError",
     "BridgeTimeoutError",
     "CommandFailedError",
+    "ExecOptions",
     "ExecResult",
     "ExecutionLimits",
     "NetworkConfig",
