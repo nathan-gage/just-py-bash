@@ -30,18 +30,29 @@ setup: install ## Backward-compatible alias for install
 vendor-bundled-runtime: .uv ## Download and verify the official Node runtime for just_bash_bundled_runtime
 	uv run python just_bash_bundled_runtime/tools/vendor_runtime.py
 
+.PHONY: build-package
+build-package: bootstrap-just-bash ## Build wheel and sdist for just-py-bash
+	uv build just_py_bash --out-dir dist
+
+.PHONY: clean
+clean: ## Remove generated build artifacts
+	rm -rf dist dist-node htmlcov .coverage just_py_bash/src/just_bash/_vendor/just-bash just_bash_bundled_runtime/build just_bash_bundled_runtime/src/just_bash_bundled_runtime.egg-info
+
 .PHONY: build-bundled-runtime
 build-bundled-runtime: vendor-bundled-runtime ## Build a wheel for just_bash_bundled_runtime
 	uv build just_bash_bundled_runtime --wheel --out-dir dist-node
 
 .PHONY: format
 format: ## Format the code
-	uv run ruff format
+	uv run ruff format --preview
 	uv run ruff check --fix --fix-only
+
+.PHONY: format-check
+format-check: ## Check formatting without modifying files
+	uv run ruff format --check --preview
 
 .PHONY: lint
 lint: ## Lint the code
-	uv run ruff format --check
 	uv run ruff check
 
 .PHONY: typecheck-pyright
@@ -68,7 +79,10 @@ testcov: ## Run tests with coverage and generate an HTML report
 	@uv run coverage html
 
 .PHONY: all
-all: format lint typecheck testcov ## Run formatting, linting, type checking, and tests with coverage report generation
+all: format lint typecheck test ## Run the standard local development checks
+
+.PHONY: all-ci
+all-ci: format-check lint typecheck testcov ## Run the CI check suite
 
 .PHONY: help
 help: ## Show this help (usage: make help)

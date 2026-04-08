@@ -7,10 +7,7 @@ __pycache__/
 .pyright/
 dist/
 dist-node/
-!just_py_bash/src/just_bash/_vendor/just-bash/dist/
-!just_py_bash/src/just_bash/_vendor/just-bash/dist/**
-!just_py_bash/src/just_bash/_vendor/just-bash/vendor/
-!just_py_bash/src/just_bash/_vendor/just-bash/vendor/**
+just_py_bash/src/just_bash/_vendor/just-bash/
 build/
 *.egg-info/
 .env

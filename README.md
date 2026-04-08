@@ -24,17 +24,13 @@ Import name: `just_bash`
 
 By default, `just-py-bash` uses a system-provided Node.js runtime.
 
-For an explicit bundled-Node install, the intended end-user interface is:
+For an explicit bundled-Node install:
 
 ```bash
 uv add 'just-py-bash[node]'
 ```
 
-That extra is backed by the first-party `just-bash-bundled-runtime` companion package. Until that companion package is published, local development installs can use:
-
-```bash
-uv add ./just_bash_bundled_runtime
-```
+That extra installs the first-party `just-bash-bundled-runtime` companion package.
 
 ## Quick Start
 
@@ -293,7 +289,7 @@ This wrapper intentionally focuses on the portable Python session API. It mirror
 
 If you need those exact low-level host-filesystem integration primitives today, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API, use `just-py-bash`.
 
-## Development Bootstrap
+## Contributing / Development
 
 For development in this repo, use the `Makefile` helpers instead of running the bootstrap steps by hand:
 
@@ -302,7 +298,32 @@ make install
 make test
 ```
 
-`make install` installs the Python dependencies and bootstraps the vendored `vendor/just-bash` backend. If you also want to build the first-party bundled Node companion package locally, run `make build-bundled-runtime`. Run `make help` to see the other available development commands.
+Common recipes:
+
+- `make install` — install Python dependencies and bootstrap the vendored `vendor/just-bash` backend
+- `make all` — local developer loop: format, lint, typecheck, and run tests
+- `make all-ci` — CI-oriented checks: format verification, lint, typecheck, and coverage tests
+- `make build-package` — build the main `just-py-bash` wheel and sdist
+- `make build-bundled-runtime` — build the companion `just-bash-bundled-runtime` wheel
+- `make clean` — remove generated build artifacts
+
+Distribution builds materialize the packaged `src/just_bash/_vendor/just-bash` runtime during wheel/sdist creation, so that generated payload does not need to live in git.
+
+### Using the local bundled runtime package during development
+
+Most users should install the published extra:
+
+```bash
+uv add 'just-py-bash[node]'
+```
+
+If you are developing both packages together and want to test against the local companion package instead of the published one, install it from this repo:
+
+```bash
+uv add ./just_bash_bundled_runtime
+```
+
+The repo's own workspace is already wired to use the local package during `uv sync`.
 
 ## Conformance Testing
 

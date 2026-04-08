@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -233,7 +234,46 @@ def test_wheel_declares_explicit_node_extra(tmp_path: Path) -> None:
         metadata = archive.read(metadata_name).decode("utf-8")
 
     assert "Provides-Extra: node" in metadata
-    assert "Requires-Dist: just-bash-bundled-runtime>=22,<23 ; extra == 'node'" in metadata
+    requires_dist_lines = [line for line in metadata.splitlines() if line.startswith("Requires-Dist: ")]
+    assert any(
+        line.startswith("Requires-Dist: just-bash-bundled-runtime")
+        and ">=22" in line
+        and "<23" in line
+        and "extra == 'node'" in line
+        for line in requires_dist_lines
+    )
+
+
+def test_wheel_contains_packaged_just_bash_runtime(tmp_path: Path) -> None:
+    wheel = build_distribution("wheel", tmp_path / "dist")
+
+    with zipfile.ZipFile(wheel) as archive:
+        names = set(archive.namelist())
+
+    assert "just_bash/_vendor/just-bash/package.json" in names
+    assert any(
+        candidate in names
+        for candidate in (
+            "just_bash/_vendor/just-bash/dist/index.js",
+            "just_bash/_vendor/just-bash/dist/bundle/index.js",
+        )
+    )
+    assert any(name.startswith("just_bash/_vendor/just-bash/vendor/cpython-emscripten/") for name in names)
+
+
+def test_sdist_contains_packaged_just_bash_runtime(tmp_path: Path) -> None:
+    sdist = build_distribution("sdist", tmp_path / "dist")
+
+    with tarfile.open(sdist, "r:gz") as archive:
+        names = set(archive.getnames())
+
+    assert any(name.endswith("/src/just_bash/_vendor/just-bash/package.json") for name in names)
+    assert any(
+        name.endswith("/src/just_bash/_vendor/just-bash/dist/index.js")
+        or name.endswith("/src/just_bash/_vendor/just-bash/dist/bundle/index.js")
+        for name in names
+    )
+    assert any("/src/just_bash/_vendor/just-bash/vendor/cpython-emscripten/" in name for name in names)
 
 
 def test_bundled_runtime_wheel_is_platform_specific_and_installs(tmp_path: Path) -> None:

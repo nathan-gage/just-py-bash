@@ -1,0 +1,92 @@
+name: Sync just-bash
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: Upstream ref to sync vendor/just-bash to
+        required: false
+        default: origin/main
+  schedule:
+    - cron: "17 5 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
+      - name: Sync Python dependencies
+        run: uv sync --all-groups
+
+      - name: Sync upstream just-bash
+        id: sync
+        run: >-
+          uv run python just_py_bash/tools/sync_just_bash.py
+          --target "${{ github.event.inputs.target_ref || 'origin/main' }}"
+
+      - name: Run full checks
+        if: steps.sync.outputs.changed == 'true'
+        run: make all-ci
+
+      - name: Create pull request
+        if: steps.sync.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/sync-just-bash
+          delete-branch: true
+          commit-message: >-
+            chore: sync just-bash to
+            ${{ steps.sync.outputs.to_version || 'main' }}
+            (${{ steps.sync.outputs.to_sha_short }})
+          title: >-
+            chore: sync just-bash to
+            ${{ steps.sync.outputs.to_version || 'main' }}
+            (${{ steps.sync.outputs.to_sha_short }})
+          body: |
+            Automated upstream sync.
+
+            - upstream ref: `${{ github.event.inputs.target_ref || 'origin/main' }}`
+            - previous sha: `${{ steps.sync.outputs.from_sha }}`
+            - new sha: `${{ steps.sync.outputs.to_sha }}`
+            - previous version: `${{ steps.sync.outputs.from_version }}`
+            - new version: `${{ steps.sync.outputs.to_version }}`
+            - version changed: `${{ steps.sync.outputs.version_changed }}`
+
+            This PR was generated after rebuilding `vendor/just-bash` and running `make all-ci`.
+          labels: |
+            automation
+            upstream-sync

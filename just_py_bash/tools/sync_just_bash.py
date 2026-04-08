@@ -8,11 +8,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-PACKAGE_DIR = Path(__file__).resolve().parents[1]
-ROOT = PACKAGE_DIR.parent
+ROOT = Path(__file__).resolve().parents[2]
 SUBMODULE = ROOT / "vendor" / "just-bash"
 PACKAGE_JSON = SUBMODULE / "package.json"
-BUILD_SCRIPT = PACKAGE_DIR / "tools" / "build_packaged_runtime.sh"
 
 
 def run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -74,7 +72,6 @@ def main() -> int:
         run(["git", "checkout", "--detach", to_sha], cwd=SUBMODULE)
         run(["pnpm", "install", "--frozen-lockfile"], cwd=SUBMODULE)
         run(["pnpm", "build"], cwd=SUBMODULE)
-        run(["bash", str(BUILD_SCRIPT)], cwd=ROOT)
 
     to_version = read_version()
     version_changed = from_version != to_version

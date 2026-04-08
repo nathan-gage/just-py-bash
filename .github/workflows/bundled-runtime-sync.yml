@@ -1,0 +1,64 @@
+name: Sync bundled runtime
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 5 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: bundled-runtime-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Sync Python dependencies
+        run: uv sync --all-groups
+
+      - name: Sync bundled runtime version
+        id: sync
+        run: uv run python just_bash_bundled_runtime/tools/sync_version.py
+
+      - name: Create pull request
+        if: steps.sync.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/sync-bundled-runtime
+          delete-branch: true
+          commit-message: >-
+            chore: bump bundled runtime to
+            ${{ steps.sync.outputs.to_version }}
+          title: >-
+            chore: bump bundled runtime to
+            ${{ steps.sync.outputs.to_version }}
+          body: |
+            Automated bundled runtime update.
+
+            - previous version: `${{ steps.sync.outputs.from_version }}`
+            - new version: `${{ steps.sync.outputs.to_version }}`
+            - major line: `${{ steps.sync.outputs.target_major }}`
+
+            This PR updates `just_bash_bundled_runtime/pyproject.toml` to the latest Node.js LTS patch in the tracked major line.
+          labels: |
+            automation
+            bundled-runtime

@@ -1,0 +1,292 @@
+name: Full CI
+
+on:
+  pull_request:
+    paths:
+      - just_py_bash/pyproject.toml
+      - just_py_bash/hatch_build.py
+      - just_py_bash/tools/build_packaged_runtime.sh
+      - just_bash_bundled_runtime/pyproject.toml
+      - just_bash_bundled_runtime/hatch_build.py
+      - Makefile
+      - .github/workflows/full-ci.yml
+      - .github/workflows/release.yml
+      - .github/workflows/bundled-runtime-release.yml
+      - tests/contracts/test_distributions.py
+  push:
+    branches:
+      - main
+    paths:
+      - just_py_bash/pyproject.toml
+      - just_py_bash/hatch_build.py
+      - just_py_bash/tools/build_packaged_runtime.sh
+      - just_bash_bundled_runtime/pyproject.toml
+      - just_bash_bundled_runtime/hatch_build.py
+      - Makefile
+      - .github/workflows/full-ci.yml
+      - .github/workflows/release.yml
+      - .github/workflows/bundled-runtime-release.yml
+      - tests/contracts/test_distributions.py
+  workflow_dispatch:
+
+concurrency:
+  group: full-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: detect version bump
+    runs-on: ubuntu-latest
+    outputs:
+      run_full: ${{ steps.detect.outputs.run_full }}
+      package_version_changed: ${{ steps.detect.outputs.package_version_changed }}
+      node_provider_version_changed: ${{ steps.detect.outputs.node_provider_version_changed }}
+      package_base_version: ${{ steps.detect.outputs.package_base_version }}
+      package_head_version: ${{ steps.detect.outputs.package_head_version }}
+      node_provider_base_version: ${{ steps.detect.outputs.node_provider_base_version }}
+      node_provider_head_version: ${{ steps.detect.outputs.node_provider_head_version }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Detect whether project version changed
+        id: detect
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          import subprocess
+          import tomllib
+          from pathlib import Path
+
+          event_name = os.environ["EVENT_NAME"]
+          base_sha = os.environ.get("BASE_SHA", "")
+          head_sha = os.environ["HEAD_SHA"]
+
+          def read_head_version(path: str) -> str:
+              payload = tomllib.loads(Path(path).read_text())
+              return str(payload["project"]["version"])
+
+          def read_version(revision: str, path: str) -> str:
+              completed = subprocess.run(
+                  ["git", "show", f"{revision}:{path}"],
+                  check=False,
+                  capture_output=True,
+                  text=True,
+              )
+              if completed.returncode != 0:
+                  return ""
+              payload = tomllib.loads(completed.stdout)
+              return str(payload["project"]["version"])
+
+          if event_name == "workflow_dispatch":
+              package_head_version = read_head_version("just_py_bash/pyproject.toml")
+              node_provider_head_version = read_head_version("just_bash_bundled_runtime/pyproject.toml")
+              print("run_full=true")
+              print("package_version_changed=true")
+              print("node_provider_version_changed=true")
+              print("package_base_version=")
+              print(f"package_head_version={package_head_version}")
+              print("node_provider_base_version=")
+              print(f"node_provider_head_version={node_provider_head_version}")
+              raise SystemExit(0)
+
+          package_base_version = (
+              "" if not base_sha or set(base_sha) == {"0"} else read_version(base_sha, "just_py_bash/pyproject.toml")
+          )
+          package_head_version = read_version(head_sha, "just_py_bash/pyproject.toml")
+          node_provider_base_version = (
+              ""
+              if not base_sha or set(base_sha) == {"0"}
+              else read_version(base_sha, "just_bash_bundled_runtime/pyproject.toml")
+          )
+          node_provider_head_version = read_version(head_sha, "just_bash_bundled_runtime/pyproject.toml")
+
+          package_version_changed = "true" if package_base_version != package_head_version else "false"
+          node_provider_version_changed = "true" if node_provider_base_version != node_provider_head_version else "false"
+          run_full = "true" if package_version_changed == "true" or node_provider_version_changed == "true" else "false"
+
+          print(f"run_full={run_full}")
+          print(f"package_version_changed={package_version_changed}")
+          print(f"node_provider_version_changed={node_provider_version_changed}")
+          print(f"package_base_version={package_base_version}")
+          print(f"package_head_version={package_head_version}")
+          print(f"node_provider_base_version={node_provider_base_version}")
+          print(f"node_provider_head_version={node_provider_head_version}")
+          PY
+
+      - name: Report decision
+        run: |
+          echo "run_full=${{ steps.detect.outputs.run_full }}"
+          echo "package_version_changed=${{ steps.detect.outputs.package_version_changed }}"
+          echo "node_provider_version_changed=${{ steps.detect.outputs.node_provider_version_changed }}"
+          echo "package_base_version=${{ steps.detect.outputs.package_base_version }}"
+          echo "package_head_version=${{ steps.detect.outputs.package_head_version }}"
+          echo "node_provider_base_version=${{ steps.detect.outputs.node_provider_base_version }}"
+          echo "node_provider_head_version=${{ steps.detect.outputs.node_provider_head_version }}"
+
+  full:
+    name: full / ubuntu / py3.11 / node22
+    needs: detect
+    if: needs.detect.outputs.run_full == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
+      - name: Install dependencies and build vendored just-bash backend
+        run: make install
+
+      - name: Vendor bundled runtime payload
+        run: make vendor-bundled-runtime
+
+      - name: Run CI check suite
+        run: make all-ci
+
+  bundled-node:
+    name: bundled-node / ubuntu / py3.11
+    needs: detect
+    if: needs.detect.outputs.run_full == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
+      - name: Install dependencies and build vendored just-bash backend
+        run: make install
+
+      - name: Vendor bundled runtime payload
+        run: make vendor-bundled-runtime
+
+      - name: Install bundled Node provider package
+        run: uv pip install just_bash_bundled_runtime
+
+      - name: Verify bundled Node works without a system node on PATH
+        run: |
+          uv run python - <<'PY'
+          import os
+          import sys
+
+          from just_bash import Bash
+
+          os.environ["PATH"] = os.path.dirname(sys.executable)
+
+          with Bash() as bash:
+              result = bash.exec("printf bundled-node")
+
+          assert result.stdout == "bundled-node"
+          PY
+
+  compatibility:
+    name: compat / ${{ matrix.os }} / py${{ matrix.python-version }} / node${{ matrix.node-version }}
+    needs: detect
+    if: needs.detect.outputs.run_full == 'true'
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+            node-version: "20"
+          - os: ubuntu-latest
+            python-version: "3.11"
+            node-version: "24"
+          - os: ubuntu-latest
+            python-version: "3.12"
+            node-version: "22"
+          - os: macos-latest
+            python-version: "3.11"
+            node-version: "22"
+          - os: windows-latest
+            python-version: "3.11"
+            node-version: "22"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
+      - name: Install dependencies and build vendored just-bash backend
+        run: make install
+
+      - name: Run non-packaging test suite
+        run: uv run pytest -q -m "not packaging"
