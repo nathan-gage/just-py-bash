@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._models import ExecResult
@@ -30,11 +31,11 @@ class BackendError(BridgeError):
         message: str,
         *,
         error_type: str | None = None,
-        details: dict[str, Any] | None = None,
+        details: Mapping[str, object] | None = None,
     ) -> None:
         super().__init__(message)
         self.error_type = error_type
-        self.details = details or {}
+        self.details = dict(details) if details is not None else {}
 
 
 class CommandFailedError(JustBashError):

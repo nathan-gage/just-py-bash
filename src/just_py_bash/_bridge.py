@@ -10,24 +10,50 @@ import tempfile
 import threading
 import weakref
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from itertools import count
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Any, cast
+from typing import Final, Literal, TypeAlias, overload
 
-from ._exceptions import (
-    BackendError,
-    BackendUnavailableError,
-    BridgeError,
-    BridgeTimeoutError,
+from pydantic import TypeAdapter, ValidationError
+
+from ._exceptions import BackendError, BackendUnavailableError, BridgeError, BridgeTimeoutError
+from ._types import (
+    BYTE_TAG,
+    BackendErrorPayload,
+    BytesPayload,
+    EncodedFileValue,
+    ExecRequestPayload,
+    ExecResultWire,
+    FileValue,
+    InfoResponse,
+    InitOptionsWire,
+    InitRequestPayload,
+    InitResponse,
+    PathRequestPayload,
+    WorkerResponse,
+    WriteBytesRequestPayload,
+    WriteTextRequestPayload,
 )
 from ._worker_source import WORKER_SOURCE
 
-BYTE_TAG = "__just_py_bash_bytes__"
 _DEFAULT_TIMEOUT_SECONDS = 30.0
+BridgeOperation: TypeAlias = Literal[
+    "exec",
+    "get_cwd",
+    "get_env",
+    "info",
+    "init",
+    "read_bytes",
+    "read_text",
+    "write_bytes",
+    "write_text",
+]
+_WORKER_RESPONSE_ADAPTER: Final[TypeAdapter[WorkerResponse]] = TypeAdapter(WorkerResponse)
+_BACKEND_ERROR_ADAPTER: Final[TypeAdapter[BackendErrorPayload]] = TypeAdapter(BackendErrorPayload)
 
 
 @dataclass(slots=True, frozen=True)
@@ -38,6 +64,20 @@ class BackendArtifacts:
 
 _worker_path_lock = threading.Lock()
 _worker_path_cache: Path | None = None
+
+
+def _parse_worker_response(line: str) -> WorkerResponse:
+    try:
+        return _WORKER_RESPONSE_ADAPTER.validate_json(line)
+    except ValidationError as exc:  # pragma: no cover - defensive bridge failure
+        raise BridgeError(f"Failed to decode just-bash worker response: {exc}: {line!r}") from exc
+
+
+def _parse_backend_error(raw_error: object) -> BackendErrorPayload:
+    try:
+        return _BACKEND_ERROR_ADAPTER.validate_python(raw_error)
+    except ValidationError:
+        return {}
 
 
 def write_worker_file() -> Path:
@@ -101,7 +141,6 @@ def resolve_backend_artifacts(
 
     package_dir = Path(__file__).resolve().parent
     repo_root = package_dir.parents[1]
-
     candidate_roots = [
         package_dir / "_vendor" / "just-bash",
         repo_root / "vendor" / "just-bash",
@@ -137,7 +176,7 @@ class NodeBridge:
     def __init__(
         self,
         *,
-        init_options: dict[str, Any],
+        init_options: InitOptionsWire,
         node_command: Sequence[str] | None = None,
         js_entry: str | os.PathLike[str] | None = None,
         package_json: str | os.PathLike[str] | None = None,
@@ -153,7 +192,7 @@ class NodeBridge:
         self._close_lock = threading.Lock()
         self._closed = False
         self._next_id = count(1)
-        self._pending: dict[int, Queue[dict[str, Any] | BaseException]] = {}
+        self._pending: dict[int, Queue[WorkerResponse | BaseException]] = {}
 
         command = [*resolve_node_command(node_command), str(write_worker_file())]
 
@@ -186,7 +225,7 @@ class NodeBridge:
         self._finalizer = weakref.finalize(self, self._finalize_process, self._proc)
 
         try:
-            result = self.request(
+            init_response = self.request(
                 "init",
                 {
                     "jsEntry": str(self.artifacts.js_entry),
@@ -199,7 +238,7 @@ class NodeBridge:
             self.close()
             raise
 
-        self.backend_version = result.get("backendVersion")
+        self.backend_version = init_response.get("backendVersion")
 
     @staticmethod
     def _close_process_pipes(proc: subprocess.Popen[str]) -> None:
@@ -258,26 +297,107 @@ class NodeBridge:
             self._stderr_thread.join(timeout=0.2)
             self._finalizer.detach()
 
+    @overload
     def request(
         self,
-        op: str,
-        payload: dict[str, Any] | None = None,
+        op: Literal["init"],
+        payload: InitRequestPayload,
         *,
         timeout: float | None = None,
-    ) -> Any:
+    ) -> InitResponse: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["info"],
+        payload: None = None,
+        *,
+        timeout: float | None = None,
+    ) -> InfoResponse: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["exec"],
+        payload: ExecRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> ExecResultWire: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["read_text"],
+        payload: PathRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> str: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["read_bytes"],
+        payload: PathRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> BytesPayload: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["write_text"],
+        payload: WriteTextRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["write_bytes"],
+        payload: WriteBytesRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["get_env"],
+        payload: None = None,
+        *,
+        timeout: float | None = None,
+    ) -> Mapping[str, str]: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["get_cwd"],
+        payload: None = None,
+        *,
+        timeout: float | None = None,
+    ) -> str: ...
+
+    def request(
+        self,
+        op: BridgeOperation,
+        payload: Mapping[str, object] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> object:
         with self._call_lock:
             self._ensure_open()
             request_id = next(self._next_id)
-            response_queue: Queue[dict[str, Any] | BaseException] = Queue(maxsize=1)
+            response_queue: Queue[WorkerResponse | BaseException] = Queue(maxsize=1)
             with self._pending_lock:
                 self._pending[request_id] = response_queue
 
-            message = {"id": request_id, "op": op}
-            if payload:
-                message.update(payload)
+            request_message: dict[str, object] = {"id": request_id, "op": op}
+            if payload is not None:
+                request_message.update(payload)
 
             try:
-                self._send(message)
+                self._send(request_message)
             except Exception:
                 with self._pending_lock:
                     self._pending.pop(request_id, None)
@@ -295,30 +415,22 @@ class NodeBridge:
             if isinstance(response, BaseException):
                 raise response
 
-            if response.get("ok"):
-                return response.get("result")
+            match response:
+                case {"ok": True, "result": result}:
+                    return result
+                case {"ok": False, "error": raw_error}:
+                    error_details = _parse_backend_error(raw_error)
+                    detail_message = error_details.get("message")
+                    error_message = (
+                        detail_message if isinstance(detail_message, str) else f"Backend operation {op!r} failed"
+                    )
+                    error_type_value = error_details.get("type")
+                    error_type = error_type_value if isinstance(error_type_value, str) else None
+                    raise BackendError(error_message, error_type=error_type, details=error_details)
+                case _:
+                    raise BridgeError("Received an invalid response from the just-bash worker")
 
-            raw_error = response.get("error")
-            error: dict[str, Any] = {}
-            if isinstance(raw_error, dict):
-                for key, value in cast(dict[object, object], raw_error).items():
-                    error[str(key)] = value
-
-            message = error.get("message")
-            if not isinstance(message, str):
-                message = f"Backend operation {op!r} failed"
-
-            error_type = error.get("type")
-            if not isinstance(error_type, str):
-                error_type = None
-
-            raise BackendError(
-                message,
-                error_type=error_type,
-                details=error,
-            )
-
-    def _send(self, message: dict[str, Any]) -> None:
+    def _send(self, message: Mapping[str, object]) -> None:
         stdin = self._proc.stdin
         if stdin is None:
             raise BridgeError("just-bash worker stdin is unavailable")
@@ -333,24 +445,20 @@ class NodeBridge:
     def _read_stdout(self) -> None:
         stdout = self._proc.stdout
         if stdout is None:
-            self._fail_all_pending(BridgeError("just-bash worker stdout is unavailable"))
+            self._fail_all_pending(BridgeError("just-py-bash worker stdout is unavailable"))
             return
 
         for line in stdout:
             try:
-                message = json.loads(line)
-            except json.JSONDecodeError as exc:
-                self._fail_all_pending(BridgeError(f"Failed to decode just-bash worker response: {exc}: {line!r}"))
+                response = _parse_worker_response(line)
+            except BridgeError as exc:
+                self._fail_all_pending(exc)
                 return
 
-            request_id = message.get("id")
-            if not isinstance(request_id, int):
-                continue
-
             with self._pending_lock:
-                response_queue = self._pending.pop(request_id, None)
+                response_queue = self._pending.pop(response["id"], None)
             if response_queue is not None:
-                response_queue.put(message)
+                response_queue.put(response)
 
         if not self._closed:
             self._fail_all_pending(BridgeError(self._process_failure_message()))
@@ -387,13 +495,19 @@ class NodeBridge:
         return message
 
 
-def encode_file_value(value: str | bytes) -> str | dict[str, str]:
+@overload
+def encode_file_value(value: str) -> str: ...
+
+
+@overload
+def encode_file_value(value: bytes) -> BytesPayload: ...
+
+
+def encode_file_value(value: FileValue) -> EncodedFileValue:
     if isinstance(value, bytes):
-        return {
-            BYTE_TAG: base64.b64encode(value).decode("ascii"),
-        }
+        return {BYTE_TAG: base64.b64encode(value).decode("ascii")}
     return value
 
 
-def decode_bytes_payload(payload: dict[str, str]) -> bytes:
+def decode_bytes_payload(payload: BytesPayload) -> bytes:
     return base64.b64decode(payload[BYTE_TAG].encode("ascii"))

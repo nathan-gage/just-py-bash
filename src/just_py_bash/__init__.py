@@ -14,6 +14,7 @@ from ._exceptions import (
     JustBashError,
 )
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
+from ._types import AllowedUrl, AllowedUrlEntry, NetworkConfig, ProcessInfo, RequestTransform
 
 try:
     __version__ = version("just-py-bash")
@@ -22,6 +23,8 @@ except PackageNotFoundError:  # pragma: no cover - editable installs during deve
 
 __all__ = [
     "Bash",
+    "AllowedUrl",
+    "AllowedUrlEntry",
     "BackendError",
     "BackendUnavailableError",
     "BridgeError",
@@ -29,8 +32,11 @@ __all__ = [
     "CommandFailedError",
     "ExecResult",
     "ExecutionLimits",
+    "NetworkConfig",
+    "ProcessInfo",
     "JavaScriptConfig",
     "JustBashError",
+    "RequestTransform",
     "__version__",
     "main",
 ]

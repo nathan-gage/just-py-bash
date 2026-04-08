@@ -1,85 +1,79 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Self
+from collections.abc import Mapping
+from typing import Annotated, Final, TypeAlias
+
+from pydantic import ConfigDict, Field, TypeAdapter
+from pydantic.alias_generators import to_camel
+from pydantic.dataclasses import dataclass
 
 from ._exceptions import CommandFailedError
+from ._types import ExecutionLimitsWire, FileValue, JavaScriptConfigWire
 
-type FileValue = str | bytes
+__all__ = ["ExecResult", "ExecutionLimits", "FileValue", "JavaScriptConfig"]
+
+_MODEL_CONFIG: Final = ConfigDict(
+    alias_generator=to_camel,
+    extra="ignore",
+    populate_by_name=True,
+    strict=True,
+    validate_assignment=True,
+)
+NonNegativeLimit: TypeAlias = Annotated[int | None, Field(default=None, ge=0)]
 
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(config=_MODEL_CONFIG, kw_only=True, slots=True)
 class ExecutionLimits:
-    """Pythonic wrapper for just-bash execution limits."""
+    """Validated Python wrapper for just-bash execution limits."""
 
-    max_call_depth: int | None = None
-    max_command_count: int | None = None
-    max_loop_iterations: int | None = None
-    max_heredoc_size: int | None = None
+    max_call_depth: NonNegativeLimit
+    max_command_count: NonNegativeLimit
+    max_loop_iterations: NonNegativeLimit
+    max_awk_iterations: NonNegativeLimit
+    max_sed_iterations: NonNegativeLimit
+    max_jq_iterations: NonNegativeLimit
+    max_sqlite_timeout_ms: NonNegativeLimit
+    max_python_timeout_ms: NonNegativeLimit
+    max_js_timeout_ms: NonNegativeLimit
+    max_glob_operations: NonNegativeLimit
+    max_string_length: NonNegativeLimit
+    max_array_elements: NonNegativeLimit
+    max_heredoc_size: NonNegativeLimit
+    max_substitution_depth: NonNegativeLimit
+    max_brace_expansion_results: NonNegativeLimit
+    max_output_size: NonNegativeLimit
+    max_file_descriptors: NonNegativeLimit
+    max_source_depth: NonNegativeLimit
 
-    def to_wire(self) -> dict[str, int]:
-        payload: dict[str, int] = {}
-        if self.max_call_depth is not None:
-            payload["maxCallDepth"] = self.max_call_depth
-        if self.max_command_count is not None:
-            payload["maxCommandCount"] = self.max_command_count
-        if self.max_loop_iterations is not None:
-            payload["maxLoopIterations"] = self.max_loop_iterations
-        if self.max_heredoc_size is not None:
-            payload["maxHeredocSize"] = self.max_heredoc_size
-        return payload
+    def to_wire(self) -> ExecutionLimitsWire:
+        payload = _EXECUTION_LIMITS_ADAPTER.dump_python(self, by_alias=True, exclude_none=True)
+        return _EXECUTION_LIMITS_WIRE_ADAPTER.validate_python(payload)
 
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(config=_MODEL_CONFIG, kw_only=True, slots=True)
 class JavaScriptConfig:
-    """Configuration for just-bash's optional QuickJS runtime."""
+    """Validated configuration for just-bash's optional QuickJS runtime."""
 
     bootstrap: str | None = None
 
-    def to_wire(self) -> dict[str, str]:
-        payload: dict[str, str] = {}
-        if self.bootstrap is not None:
-            payload["bootstrap"] = self.bootstrap
-        return payload
+    def to_wire(self) -> JavaScriptConfigWire:
+        payload = _JAVASCRIPT_CONFIG_ADAPTER.dump_python(self, by_alias=True, exclude_none=True)
+        return _JAVASCRIPT_CONFIG_WIRE_ADAPTER.validate_python(payload)
 
 
-@dataclass(slots=True)
+@dataclass(config=_MODEL_CONFIG, slots=True)
 class ExecResult:
-    """Structured result from :meth:`just_py_bash.Bash.exec`."""
+    """Validated result from :meth:`just_py_bash.Bash.exec`."""
 
-    stdout: str
-    stderr: str
-    exit_code: int
-    env: dict[str, str]
-    metadata: dict[str, Any] | None = None
+    stdout: str = ""
+    stderr: str = ""
+    exit_code: int = 0
+    env: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, object] | None = None
 
     @classmethod
-    def from_wire(cls, payload: dict[str, Any]) -> Self:
-        stdout = payload.get("stdout", "")
-        stderr = payload.get("stderr", "")
-        exit_code = payload.get("exitCode", 0)
-
-        env: dict[str, str] = {}
-        raw_env = payload.get("env")
-        if isinstance(raw_env, dict):
-            for key, value in raw_env.items():
-                if isinstance(key, str) and isinstance(value, str):
-                    env[key] = value
-
-        metadata: dict[str, Any] | None = None
-        raw_metadata = payload.get("metadata")
-        if isinstance(raw_metadata, dict):
-            metadata = {}
-            for key, value in raw_metadata.items():
-                metadata[str(key)] = value
-
-        return cls(
-            stdout=stdout if isinstance(stdout, str) else "",
-            stderr=stderr if isinstance(stderr, str) else "",
-            exit_code=exit_code if isinstance(exit_code, int) else 0,
-            env=env,
-            metadata=metadata,
-        )
+    def from_wire(cls, payload: Mapping[str, object]) -> ExecResult:
+        return _EXEC_RESULT_ADAPTER.validate_python(dict(payload))
 
     @property
     def ok(self) -> bool:
@@ -89,10 +83,17 @@ class ExecResult:
     def returncode(self) -> int:
         return self.exit_code
 
-    def check(self) -> Self:
+    def check(self) -> ExecResult:
         if not self.ok:
             raise CommandFailedError(self)
         return self
 
-    def check_returncode(self) -> Self:
+    def check_returncode(self) -> ExecResult:
         return self.check()
+
+
+_EXECUTION_LIMITS_ADAPTER: Final = TypeAdapter(ExecutionLimits)
+_EXECUTION_LIMITS_WIRE_ADAPTER: Final = TypeAdapter(ExecutionLimitsWire)
+_JAVASCRIPT_CONFIG_ADAPTER: Final = TypeAdapter(JavaScriptConfig)
+_JAVASCRIPT_CONFIG_WIRE_ADAPTER: Final = TypeAdapter(JavaScriptConfigWire)
+_EXEC_RESULT_ADAPTER: Final = TypeAdapter(ExecResult)

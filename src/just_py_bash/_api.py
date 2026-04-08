@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Self
+from typing import Self
 
 from ._bridge import NodeBridge, decode_bytes_payload, encode_file_value
-from ._models import ExecResult, ExecutionLimits, FileValue, JavaScriptConfig
+from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
+from ._types import ExecOptionsWire, FileValue, InitOptionsWire, NetworkConfig, ProcessInfo
 
 
 class Bash:
@@ -28,13 +29,13 @@ class Bash:
         python: bool = False,
         javascript: bool | JavaScriptConfig = False,
         commands: Sequence[str] | None = None,
-        network: Mapping[str, Any] | None = None,
-        process_info: Mapping[str, int] | None = None,
+        network: NetworkConfig | None = None,
+        process_info: ProcessInfo | None = None,
         node_command: Sequence[str] | None = None,
         js_entry: str | None = None,
         package_json: str | None = None,
     ) -> None:
-        init_options: dict[str, Any] = {}
+        init_options: InitOptionsWire = {}
 
         if files is not None:
             init_options["files"] = {path: encode_file_value(content) for path, content in files.items()}
@@ -51,9 +52,9 @@ class Bash:
         if commands is not None:
             init_options["commands"] = list(commands)
         if network is not None:
-            init_options["network"] = dict(network)
+            init_options["network"] = network
         if process_info is not None:
-            init_options["processInfo"] = dict(process_info)
+            init_options["processInfo"] = process_info
 
         self._bridge = NodeBridge(
             init_options=init_options,
@@ -88,7 +89,7 @@ class Bash:
         args: Sequence[str] | None = None,
         timeout: float | None = None,
     ) -> ExecResult:
-        options: dict[str, Any] = {}
+        options: ExecOptionsWire = {}
         if env is not None:
             options["env"] = dict(env)
         if replace_env:
