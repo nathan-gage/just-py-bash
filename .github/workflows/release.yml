@@ -92,13 +92,12 @@ jobs:
           ref: ${{ needs.detect.outputs.ref }}
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: release
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v5

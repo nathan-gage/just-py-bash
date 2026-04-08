@@ -29,13 +29,12 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: upstream-sync
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
@@ -60,7 +59,7 @@ jobs:
       - name: Sync upstream just-bash
         id: sync
         run: >-
-          python just_py_bash/tools/sync_just_bash.py
+          uv run python just_py_bash/tools/sync_just_bash.py
           --target "${{ github.event.inputs.target_ref || 'origin/main' }}"
 
       - name: Refresh uv.lock after version bump

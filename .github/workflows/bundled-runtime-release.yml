@@ -97,23 +97,22 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.detect.outputs.ref }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: bundled-runtime-release-build
 
       - name: Vendor bundled runtime payload
-        run: python just_bash_bundled_runtime/tools/vendor_runtime.py
+        run: uv run python just_bash_bundled_runtime/tools/vendor_runtime.py
 
       - name: Build bundled runtime wheel
         run: uv build just_bash_bundled_runtime --wheel --out-dir dist-node
 
       - name: Smoke test bundled runtime wheel
         run: |
-          python - <<'PY'
+          uv run python - <<'PY'
           import subprocess
           import sys
           from pathlib import Path
@@ -158,13 +157,12 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.detect.outputs.ref }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: bundled-runtime-release
 
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8

@@ -6,13 +6,17 @@ on:
     branches:
       - main
 
+env:
+  COLUMNS: 150
+  UV_FROZEN: "1"
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  cheap:
-    name: cheap / ubuntu / py3.11 / node22
+  checks:
+    name: checks / ubuntu / py3.11 / node22
     runs-on: ubuntu-latest
 
     steps:
@@ -21,13 +25,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: checks
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
@@ -55,6 +58,47 @@ jobs:
 
       - name: Typecheck (pyright)
         run: make typecheck-pyright
+
+  tests:
+    name: test / ubuntu / py${{ matrix.python-version }} / node22
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
+          - "3.14"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-suffix: tests-${{ matrix.python-version }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 8.15.9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
+
+      - name: Install dependencies and build vendored just-bash backend
+        run: make install
 
       - name: Run non-packaging test suite
         run: make test-non-packaging

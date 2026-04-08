@@ -24,13 +24,12 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: bundled-runtime-sync
 
       - name: Sync Python dependencies
         run: uv sync --all-groups
