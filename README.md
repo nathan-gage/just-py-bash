@@ -273,15 +273,14 @@ If you need those exact low-level host-filesystem integration primitives today, 
 
 ## Development Bootstrap
 
-For development in this repo, the wrapper can use `vendor/just-bash` directly:
+For development in this repo, use the `Makefile` helpers instead of running the bootstrap steps by hand:
 
 ```bash
-cd vendor/just-bash
-pnpm install
-pnpm build
-cd ../..
-uv run pytest
+make install
+make test
 ```
+
+`make install` installs the Python dependencies and bootstraps the vendored `vendor/just-bash` backend. Run `make help` to see the other available development commands.
 
 ## Conformance Testing
 

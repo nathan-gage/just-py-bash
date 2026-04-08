@@ -8,9 +8,12 @@
 .pnpm: ## Check that pnpm is installed
 	@pnpm --version || echo 'Please install pnpm: https://pnpm.io/installation'
 
-.PHONY: install
-install: .uv ## Install the package and development dependencies
+.PHONY: install-python
+install-python: .uv ## Install Python package and development dependencies
 	uv sync --frozen
+
+.PHONY: install
+install: install-python bootstrap-just-bash ## Install Python deps and build vendored just-bash backend
 
 .PHONY: sync
 sync: .uv ## Update local packages and uv.lock
@@ -21,7 +24,7 @@ bootstrap-just-bash: .pnpm ## Install and build vendored just-bash backend
 	cd vendor/just-bash && pnpm install && pnpm build
 
 .PHONY: setup
-setup: install bootstrap-just-bash ## Install Python deps and build vendored just-bash backend
+setup: install ## Backward-compatible alias for install
 
 .PHONY: format
 format: ## Format the code
