@@ -92,7 +92,7 @@ def test_bundled_node_provider_is_preferred_over_system_node(tmp_path: Path) -> 
     completed = run_python(
         textwrap.dedent(
             """
-            from just_py_bash import Bash
+            from just_bash import Bash
 
             with Bash() as bash:
                 result = bash.exec("printf provider")
@@ -129,7 +129,7 @@ def test_node_command_argument_overrides_bundled_node_provider(tmp_path: Path) -
             import json
             import sys
 
-            from just_py_bash import Bash
+            from just_bash import Bash
 
             with Bash(node_command=[sys.executable, {str(arg_wrapper)!r}]) as bash:
                 result = bash.exec("printf explicit")

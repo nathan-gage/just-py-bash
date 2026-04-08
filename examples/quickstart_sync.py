@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from just_py_bash import Bash, ExecutionLimits
+from just_bash import Bash, ExecutionLimits
 
 
 def main() -> None:

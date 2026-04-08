@@ -6,7 +6,7 @@ This document is the working inventory for the wrapper: what exists today, what 
 
 This roadmap was prepared by reviewing:
 
-- `just_py_bash/src/just_py_bash/`
+- `just_py_bash/src/just_bash/`
 - `tests/`
 - `examples/`
 - `README.md`
@@ -90,13 +90,13 @@ The current design is solid and intentionally simple:
 - a dedicated Node worker hosts a real upstream `just-bash` `Bash` instance
 - the worker speaks a small JSON line protocol
 - sync and async Python bridges are separate implementations
-- the package can boot either the repo vendored backend or the packaged backend under `just_py_bash/src/just_py_bash/_vendor/just-bash`
+- the package can boot either the repo vendored backend or the packaged backend under `just_py_bash/src/just_bash/_vendor/just-bash`
 
 ### Packaging/runtime story
 
 The repo already has a credible packaging story:
 
-- a packaged backend is built into `just_py_bash/src/just_py_bash/_vendor/just-bash`
+- a packaged backend is built into `just_py_bash/src/just_bash/_vendor/just-bash`
 - `just_py_bash/tools/build_packaged_runtime.sh` bundles upstream runtime artifacts, worker files, WASM payloads, and package metadata
 - wheel/sdist installation is tested from isolated virtual environments with no repo checkout
 
@@ -187,7 +187,7 @@ These are the most valuable near-term additions because they improve confidence 
 
 - **Backend override knobs are untested**
   - Add tests for `node_command`, `js_entry`, and `package_json`.
-  - Verify the environment-variable forms too (`JUST_PY_BASH_NODE`, `JUST_PY_BASH_JS_ENTRY`, `JUST_PY_BASH_PACKAGE_JSON`).
+  - Verify the environment-variable forms too (`JUST_BASH_NODE`, `JUST_BASH_JS_ENTRY`, `JUST_BASH_PACKAGE_JSON`).
 
 - **Bridge unhappy-path behavior is under-tested**
   - Add tests for `BackendUnavailableError`, `BridgeTimeoutError`, malformed worker responses, worker crashes, and close-after-failure behavior.

@@ -70,8 +70,8 @@ def build_distribution(kind: str, dist_dir: Path, *, package_root: Path = PACKAG
 
 def scrub_distribution_env() -> dict[str, str]:
     env = os.environ.copy()
-    env.pop("JUST_PY_BASH_JS_ENTRY", None)
-    env.pop("JUST_PY_BASH_PACKAGE_JSON", None)
+    env.pop("JUST_BASH_JS_ENTRY", None)
+    env.pop("JUST_BASH_PACKAGE_JSON", None)
     return env
 
 
@@ -148,7 +148,7 @@ def test_installed_wheel_boots_without_repo_checkout(installed_wheel: InstalledD
     completed = run_installed_python(
         installed_wheel,
         (
-            "from just_py_bash import Bash; "
+            "from just_bash import Bash; "
             "bash = Bash(); "
             "result = bash.exec('printf wheel-runtime'); "
             "print(bash.backend_version); "
@@ -178,7 +178,7 @@ def test_installed_wheel_supports_stateful_api_session(installed_wheel: Installe
         installed_wheel,
         (
             "import json; "
-            "from just_py_bash import Bash; "
+            "from just_bash import Bash; "
             "bash = Bash(cwd='/workspace', files={'/workspace/seed.txt': 'seed\\n'}); "
             "first = bash.exec('cat seed.txt'); "
             "bash.write_text('extra.txt', 'more\\n'); "
@@ -200,7 +200,7 @@ def test_installed_sdist_boots_without_repo_checkout(installed_sdist: InstalledD
     completed = run_installed_python(
         installed_sdist,
         (
-            "from just_py_bash import Bash; "
+            "from just_bash import Bash; "
             "bash = Bash(); "
             "result = bash.exec('printf sdist-runtime'); "
             "print(bash.backend_version); "

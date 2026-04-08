@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from just_py_bash import AsyncBash
+from just_bash import AsyncBash
 
 
 async def main() -> None:

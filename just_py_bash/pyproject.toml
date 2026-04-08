@@ -17,10 +17,13 @@ node = [
 ]
 
 [project.scripts]
-just-py-bash = "just_py_bash:main"
+just-py-bash = "just_bash:main"
 
 [tool.uv.sources]
 just-bash-bundled-runtime = { path = "../just_bash_bundled_runtime" }
+
+[tool.uv.build-backend]
+module-name = "just_bash"
 
 [build-system]
 requires = ["uv_build>=0.11.2,<0.12.0"]

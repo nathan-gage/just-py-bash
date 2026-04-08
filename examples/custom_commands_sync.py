@@ -5,7 +5,7 @@ import shlex
 from typing import Final
 from uuid import uuid4
 
-from just_py_bash import Bash, CustomCommandContext
+from just_bash import Bash, CustomCommandContext
 
 PARAGRAPHS: Final[list[str]] = [
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",

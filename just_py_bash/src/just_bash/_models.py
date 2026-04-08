@@ -62,7 +62,7 @@ class JavaScriptConfig:
 
 @dataclass(config=_MODEL_CONFIG, slots=True)
 class ExecResult:
-    """Validated result from :meth:`just_py_bash.Bash.exec`."""
+    """Validated result from :meth:`just_bash.Bash.exec`."""
 
     stdout: StrictStr = ""
     stderr: StrictStr = ""

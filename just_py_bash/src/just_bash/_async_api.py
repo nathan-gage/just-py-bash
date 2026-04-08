@@ -17,7 +17,7 @@ from ._types import FileValue, NetworkConfig, ProcessInfo
 class AsyncBash:
     """Async wrapper around a long-lived just-bash session.
 
-    ``AsyncBash`` mirrors :class:`just_py_bash.Bash`, but uses native
+    ``AsyncBash`` mirrors :class:`just_bash.Bash`, but uses native
     ``asyncio`` subprocesses, tasks, and locks internally. Construction is lazy:
     the Node.js worker is opened on first use or when entering ``async with``.
     """

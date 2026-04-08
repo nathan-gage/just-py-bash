@@ -38,7 +38,7 @@ That means:
 - test only the **public Python API**
 - use subprocesses and black-box behavior where possible
 - never rely on private modules, private methods, internal worker details, or internal transport helpers from `src/`
-- never import `just_py_bash._*` from tests
+- never import `just_bash._*` from tests
 
 If `src/` changes substantially, the tests should still be valid unless the public contract changes.
 
@@ -70,7 +70,7 @@ The main failure modes we care about are wrapper/interop failures such as:
 
 Allowed dependencies from tests:
 
-- `just_py_bash` public exports
+- `just_bash` public exports
 - test-only helpers in `tests/support/`
 - standard library
 - pytest / hypothesis / subprocess tooling
@@ -78,10 +78,10 @@ Allowed dependencies from tests:
 
 Disallowed from tests:
 
-- `just_py_bash._bridge`
-- `just_py_bash._api`
-- `just_py_bash._models`
-- any private helper under `just_py_bash/src/just_py_bash/_*`
+- `just_bash._bridge`
+- `just_bash._api`
+- `just_bash._models`
+- any private helper under `just_py_bash/src/just_bash/_*`
 
 If a test needs functionality that only exists in a private helper, re-create the minimum test-only helper under `tests/support/` instead.
 

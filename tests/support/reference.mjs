@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
-const BYTE_TAG = '__just_py_bash_bytes__';
+const BYTE_TAG = '__just_bash_bytes__';
 
 function isBytes(value) {
   return Boolean(

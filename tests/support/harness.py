@@ -16,7 +16,7 @@ from pydantic import TypeAdapter, ValidationError
 
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE_SCRIPT = Path(__file__).resolve().with_name("reference.mjs")
-BYTE_TAG = "__just_py_bash_bytes__"
+BYTE_TAG = "__just_bash_bytes__"
 _JSON_OBJECT_ADAPTER = TypeAdapter(dict[str, object])
 
 
@@ -27,20 +27,20 @@ class BackendArtifacts:
 
 
 def resolve_node_command() -> list[str]:
-    if configured := os.environ.get("JUST_PY_BASH_NODE"):
+    if configured := os.environ.get("JUST_BASH_NODE"):
         return shlex.split(configured)
 
     node = shutil.which("node")
     if not node:
         raise AssertionError(
-            "Node.js is required for differential tests. Install Node or set JUST_PY_BASH_NODE.",
+            "Node.js is required for differential tests. Install Node or set JUST_BASH_NODE.",
         )
     return [node]
 
 
 def resolve_backend_artifacts() -> BackendArtifacts:
-    env_js_entry = os.environ.get("JUST_PY_BASH_JS_ENTRY")
-    env_package_json = os.environ.get("JUST_PY_BASH_PACKAGE_JSON")
+    env_js_entry = os.environ.get("JUST_BASH_JS_ENTRY")
+    env_package_json = os.environ.get("JUST_BASH_PACKAGE_JSON")
     if env_js_entry:
         js_entry = Path(env_js_entry).expanduser().resolve()
         package_json = (
@@ -63,7 +63,7 @@ def resolve_backend_artifacts() -> BackendArtifacts:
 
     raise AssertionError(
         "Could not locate a built just-bash artifact for reference testing. "
-        "Build vendor/just-bash first or set JUST_PY_BASH_JS_ENTRY and JUST_PY_BASH_PACKAGE_JSON.",
+        "Build vendor/just-bash first or set JUST_BASH_JS_ENTRY and JUST_BASH_PACKAGE_JSON.",
     )
 
 
@@ -78,7 +78,7 @@ def decode_bytes_payload(payload: dict[str, str]) -> bytes:
 
 
 def public_api() -> Any:
-    return import_module("just_py_bash")
+    return import_module("just_bash")
 
 
 def normalize_exec_result(result: Any) -> dict[str, Any]:

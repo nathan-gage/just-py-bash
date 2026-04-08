@@ -19,6 +19,9 @@ Each session owns a dedicated Node.js worker process and a real upstream `just-b
 uv add just-py-bash
 ```
 
+Install name: `just-py-bash`  
+Import name: `just_bash`
+
 By default, `just-py-bash` uses a system-provided Node.js runtime.
 
 For an explicit bundled-Node install, the intended end-user interface is:
@@ -38,7 +41,7 @@ uv add ./just_bash_bundled_runtime
 ### Synchronous API
 
 ```python
-from just_py_bash import Bash, ExecutionLimits
+from just_bash import Bash, ExecutionLimits
 
 with Bash(
     cwd="/workspace",
@@ -59,7 +62,7 @@ with Bash(
 ```python
 import asyncio
 
-from just_py_bash import AsyncBash
+from just_bash import AsyncBash
 
 
 async def main() -> None:
@@ -83,7 +86,7 @@ Upstream `just-bash` uses `defineCommand(...)`. The Python wrapper exposes the s
 ### Sync custom commands
 
 ```python
-from just_py_bash import Bash, CustomCommandContext
+from just_bash import Bash, CustomCommandContext
 
 
 def greet(args: list[str], ctx: CustomCommandContext) -> dict[str, str | int]:
@@ -102,7 +105,7 @@ with Bash(custom_commands={"greet": greet}) as bash:
 ```python
 import asyncio
 
-from just_py_bash import AsyncBash, AsyncCustomCommandContext
+from just_bash import AsyncBash, AsyncCustomCommandContext
 
 
 async def annotate(args: list[str], ctx: AsyncCustomCommandContext) -> dict[str, str | int]:
@@ -136,7 +139,7 @@ Custom commands can:
 The Python API mirrors the upstream configuration model, adapted to Python types and keyword arguments.
 
 ```python
-from just_py_bash import Bash, ExecutionLimits, JavaScriptConfig
+from just_bash import Bash, ExecutionLimits, JavaScriptConfig
 
 bash = Bash(
     files={"/data/file.txt": "content"},
@@ -189,7 +192,7 @@ bash.close()
 Network access is disabled by default. Enable it with `network=...`.
 
 ```python
-from just_py_bash import Bash
+from just_bash import Bash
 
 with Bash(
     network={
@@ -210,7 +213,7 @@ Like upstream `just-bash`, `curl` only exists when network access is configured.
 The Python wrapper passes `python=True` through to upstream `just-bash`.
 
 ```python
-from just_py_bash import Bash
+from just_bash import Bash
 
 with Bash(python=True) as bash:
     result = bash.exec('python -c "print(sum([2, 3, 5]))"')
@@ -222,7 +225,7 @@ with Bash(python=True) as bash:
 The Python wrapper passes `javascript=True` or `JavaScriptConfig(...)` through to upstream `just-bash`.
 
 ```python
-from just_py_bash import Bash, JavaScriptConfig
+from just_bash import Bash, JavaScriptConfig
 
 with Bash(javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapped';")) as bash:
     result = bash.exec("js-exec -c 'console.log(globalThis.prefix + \":\" + (2 + 3))'")
@@ -259,7 +262,7 @@ See [`examples/README.md`](examples/README.md) for run instructions.
 Example:
 
 ```python
-from just_py_bash import Bash
+from just_bash import Bash
 
 with Bash() as bash:
     result = bash.exec("false")
@@ -274,15 +277,15 @@ if not result.ok:
 By default the package uses its vendored `just-bash` runtime and resolves Node.js in this order:
 
 1. `node_command=` passed to `Bash(...)` or `AsyncBash(...)`
-2. `JUST_PY_BASH_NODE`
+2. `JUST_BASH_NODE`
 3. the first-party bundled Node provider installed by `just-py-bash[node]`
 4. a system `node` on `PATH`
 
 To point at a different `just-bash` backend artifact, set:
 
-- `JUST_PY_BASH_JS_ENTRY`
-- `JUST_PY_BASH_PACKAGE_JSON`
-- optionally `JUST_PY_BASH_NODE`
+- `JUST_BASH_JS_ENTRY`
+- `JUST_BASH_PACKAGE_JSON`
+- optionally `JUST_BASH_NODE`
 
 ## Scope Compared to Upstream TypeScript API
 

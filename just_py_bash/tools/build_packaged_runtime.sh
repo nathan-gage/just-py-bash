@@ -4,7 +4,7 @@ set -euo pipefail
 PACKAGE_DIR=$(cd "$(dirname "$0")/.." && pwd)
 ROOT=$(cd "$PACKAGE_DIR/.." && pwd)
 VENDOR_DIR="$ROOT/vendor/just-bash"
-OUT_DIR="$PACKAGE_DIR/src/just_py_bash/_vendor/just-bash"
+OUT_DIR="$PACKAGE_DIR/src/just_bash/_vendor/just-bash"
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 

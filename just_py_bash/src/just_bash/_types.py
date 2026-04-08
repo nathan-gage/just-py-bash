@@ -5,14 +5,14 @@ from typing import Final, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
 
-BYTE_TAG: Final = "__just_py_bash_bytes__"
+BYTE_TAG: Final = "__just_bash_bytes__"
 
 FileValue: TypeAlias = str | bytes
 HttpMethod: TypeAlias = Literal["GET", "HEAD", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
 
 
 class BytesPayload(TypedDict):
-    __just_py_bash_bytes__: str
+    __just_bash_bytes__: str
 
 
 EncodedFileValue: TypeAlias = str | BytesPayload

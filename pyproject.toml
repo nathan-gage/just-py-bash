@@ -86,13 +86,13 @@ patch = ["subprocess"]
 concurrency = ["multiprocessing", "thread"]
 branch = true
 data_file = ".coverage/.coverage"
-source = ["just_py_bash/src/just_py_bash"]
+source = ["just_py_bash/src/just_bash"]
 
 [tool.coverage.paths]
 source = [
-    "just_py_bash/src/just_py_bash",
-    "*/site-packages/just_py_bash",
-    "*\\site-packages\\just_py_bash",
+    "just_py_bash/src/just_bash",
+    "*/site-packages/just_bash",
+    "*\\site-packages\\just_bash",
 ]
 
 [tool.coverage.report]

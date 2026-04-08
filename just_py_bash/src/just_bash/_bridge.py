@@ -79,7 +79,7 @@ def resolve_node_command(node_command: Sequence[str] | None = None) -> list[str]
     if node_command:
         return [str(part) for part in node_command]
 
-    if configured := os.environ.get("JUST_PY_BASH_NODE"):
+    if configured := os.environ.get("JUST_BASH_NODE"):
         return shlex.split(configured)
 
     bundled = resolve_bundled_node_command()
@@ -90,7 +90,7 @@ def resolve_node_command(node_command: Sequence[str] | None = None) -> list[str]
     if not node:
         raise BackendUnavailableError(
             "Could not find a Node.js executable. Install Node.js, install just-py-bash[node], or set "
-            "JUST_PY_BASH_NODE to the command that should run the backend.",
+            "JUST_BASH_NODE to the command that should run the backend.",
         )
     return [node]
 
@@ -113,8 +113,8 @@ def resolve_backend_artifacts(
             raise BackendUnavailableError(f"just-bash package metadata not found: {package_json_path}")
         return BackendArtifacts(js_entry=js_entry_path, package_json=package_json_path)
 
-    env_js_entry = os.environ.get("JUST_PY_BASH_JS_ENTRY")
-    env_package_json = os.environ.get("JUST_PY_BASH_PACKAGE_JSON")
+    env_js_entry = os.environ.get("JUST_BASH_JS_ENTRY")
+    env_package_json = os.environ.get("JUST_BASH_PACKAGE_JSON")
     if env_js_entry:
         return resolve_backend_artifacts(
             js_entry=env_js_entry,
@@ -145,8 +145,8 @@ def resolve_backend_artifacts(
         f"{searched}\n\n"
         "For development in this repo, build the vendored checkout first:\n"
         "  (cd vendor/just-bash && pnpm install && pnpm build)\n\n"
-        "Or point the wrapper at a different artifact with JUST_PY_BASH_JS_ENTRY "
-        "and JUST_PY_BASH_PACKAGE_JSON."
+        "Or point the wrapper at a different artifact with JUST_BASH_JS_ENTRY "
+        "and JUST_BASH_PACKAGE_JSON."
     )
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from just_py_bash import AsyncBash, AsyncCustomCommandContext
+from just_bash import AsyncBash, AsyncCustomCommandContext
 
 
 def ok(*, stdout: str = "", stderr: str = "", exit_code: int = 0) -> dict[str, str | int]:
