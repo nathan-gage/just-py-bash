@@ -153,17 +153,17 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.9
 
       - name: Install dependencies and build vendored just-bash backend
         run: make install
@@ -198,17 +198,17 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.9
 
       - name: Install dependencies and build vendored just-bash backend
         run: make install
@@ -275,17 +275,17 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.9
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
           cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 8.15.9
 
       - name: Sync Python dependencies
         run: uv sync --all-groups
