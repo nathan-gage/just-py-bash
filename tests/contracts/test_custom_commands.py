@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 from typing import Any
 
@@ -114,9 +115,9 @@ def test_custom_command_nonzero_result_is_preserved() -> None:
 
 def test_async_custom_command_is_supported() -> None:
     async def hello(args: list[str], ctx: Any) -> dict[str, Any]:
-        del ctx
+        nested = await ctx.exec_async("printf nested")
         return {
-            "stdout": f"async:{args[0] if args else 'world'}\n",
+            "stdout": f"async:{args[0] if args else 'world'}|{nested.stdout}\n",
             "stderr": "",
             "exit_code": 0,
         }
@@ -124,8 +125,28 @@ def test_async_custom_command_is_supported() -> None:
     with make_custom_command_session(custom_commands={"hello": hello}) as bash:
         result = bash.exec("hello mars")
 
-    assert result.stdout == "async:mars\n"
+    assert result.stdout == "async:mars|nested\n"
     assert result.exit_code == 0
+
+
+def test_async_bash_custom_command_is_supported() -> None:
+    AsyncBash = public_api().AsyncBash
+
+    async def hello(args: list[str], ctx: Any) -> dict[str, Any]:
+        nested = await ctx.exec("printf nested")
+        return {
+            "stdout": f"async-session:{args[0] if args else 'world'}|{nested.stdout}\n",
+            "stderr": "",
+            "exit_code": 0,
+        }
+
+    async def exercise() -> None:
+        async with AsyncBash(custom_commands={"hello": hello}) as bash:
+            result = await bash.exec("hello mars")
+        assert result.stdout == "async-session:mars|nested\n"
+        assert result.exit_code == 0
+
+    asyncio.run(exercise())
 
 
 def test_custom_command_exception_becomes_shell_failure() -> None:

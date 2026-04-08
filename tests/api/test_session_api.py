@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from tests.support.harness import public_api
@@ -60,3 +62,37 @@ def test_close_is_idempotent() -> None:
     bash = Bash()
     bash.close()
     bash.close()
+
+
+def test_async_bash_round_trips_commands_and_files() -> None:
+    api = public_api()
+    AsyncBash = api.AsyncBash
+
+    async def exercise() -> None:
+        async with AsyncBash(cwd="/workspace") as bash:
+            assert bash.backend_version
+
+            await bash.write_text("note.txt", "hello\n")
+            result = await bash.exec("cat note.txt")
+            contents = await bash.read_text("note.txt")
+            env = await bash.get_env()
+            cwd = await bash.get_cwd()
+
+        assert result.stdout == "hello\n"
+        assert contents == "hello\n"
+        assert isinstance(env, dict)
+        assert cwd == "/workspace"
+
+    asyncio.run(exercise())
+
+
+def test_async_bash_close_is_idempotent() -> None:
+    AsyncBash = public_api().AsyncBash
+
+    async def exercise() -> None:
+        bash = AsyncBash()
+        await bash.close()
+        await bash.close()
+        assert bash.closed
+
+    asyncio.run(exercise())

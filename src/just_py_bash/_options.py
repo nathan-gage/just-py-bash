@@ -9,7 +9,7 @@ from ._models import ExecutionLimits, JavaScriptConfig
 from ._types import ExecOptionsWire, FileValue, InitOptionsWire, NetworkConfig, ProcessInfo
 
 if TYPE_CHECKING:
-    from ._custom_commands import CustomCommands
+    from ._custom_commands import CustomCommandHandlers
 
 
 @dataclass(slots=True, kw_only=True)
@@ -21,7 +21,7 @@ class BashOptions:
     python: bool = False
     javascript: bool | JavaScriptConfig = False
     commands: Sequence[str] | None = None
-    custom_commands: CustomCommands | None = None
+    custom_commands: CustomCommandHandlers | None = None
     network: NetworkConfig | None = None
     process_info: ProcessInfo | None = None
 

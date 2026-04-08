@@ -5,7 +5,15 @@ import sys
 from importlib.metadata import PackageNotFoundError, version
 
 from ._api import Bash
-from ._custom_commands import CustomCommandCallback, CustomCommandContext, CustomCommands
+from ._async_api import AsyncBash
+from ._custom_commands import (
+    AsyncCustomCommandCallback,
+    AsyncCustomCommandContext,
+    AsyncCustomCommands,
+    CustomCommandCallback,
+    CustomCommandContext,
+    CustomCommands,
+)
 from ._exceptions import (
     BackendError,
     BackendUnavailableError,
@@ -24,7 +32,11 @@ except PackageNotFoundError:  # pragma: no cover - editable installs during deve
     __version__ = "0.0.0"
 
 __all__ = [
+    "AsyncBash",
     "Bash",
+    "AsyncCustomCommandCallback",
+    "AsyncCustomCommandContext",
+    "AsyncCustomCommands",
     "AllowedUrl",
     "AllowedUrlEntry",
     "BackendError",

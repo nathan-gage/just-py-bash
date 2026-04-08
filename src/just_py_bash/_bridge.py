@@ -15,14 +15,19 @@ from hashlib import sha256
 from itertools import count
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Final, Literal, TypeAlias, overload
+from typing import Literal, overload
 
-from pydantic import TypeAdapter, ValidationError
-
-from ._custom_commands import CustomCommandContext, CustomCommands, command_error_result, invoke_custom_command
+from ._bridge_protocol import (
+    DEFAULT_TIMEOUT_SECONDS,
+    BridgeOperation,
+    parse_backend_error,
+    parse_custom_command_event,
+    parse_worker_message,
+    parse_worker_response,
+)
+from ._custom_commands import CustomCommandContext, CustomCommandHandlers, command_error_result, invoke_custom_command
 from ._exceptions import BackendError, BackendUnavailableError, BridgeError, BridgeTimeoutError
 from ._types import (
-    BackendErrorPayload,
     BytesPayload,
     CustomCommandCompleteRequestPayload,
     CustomCommandEvent,
@@ -40,25 +45,6 @@ from ._types import (
 )
 from ._worker_source import WORKER_SOURCE
 
-_DEFAULT_TIMEOUT_SECONDS = 30.0
-BridgeOperation: TypeAlias = Literal[
-    "custom_command_complete",
-    "custom_command_exec",
-    "exec",
-    "get_cwd",
-    "get_env",
-    "info",
-    "init",
-    "read_bytes",
-    "read_text",
-    "write_bytes",
-    "write_text",
-]
-_JSON_OBJECT_ADAPTER: Final[TypeAdapter[dict[str, object]]] = TypeAdapter(dict[str, object])
-_WORKER_RESPONSE_ADAPTER: Final[TypeAdapter[WorkerResponse]] = TypeAdapter(WorkerResponse)
-_BACKEND_ERROR_ADAPTER: Final[TypeAdapter[BackendErrorPayload]] = TypeAdapter(BackendErrorPayload)
-_CUSTOM_COMMAND_EVENT_ADAPTER: Final[TypeAdapter[CustomCommandEvent]] = TypeAdapter(CustomCommandEvent)
-
 
 @dataclass(slots=True, frozen=True)
 class BackendArtifacts:
@@ -68,38 +54,6 @@ class BackendArtifacts:
 
 _worker_path_lock = threading.Lock()
 _worker_path_cache: Path | None = None
-
-
-def _parse_worker_message(line: str) -> dict[str, object]:
-    try:
-        return _JSON_OBJECT_ADAPTER.validate_json(line)
-    except ValidationError as exc:  # pragma: no cover - defensive bridge failure
-        raise BridgeError(f"Failed to decode just-bash worker response: {exc}: {line!r}") from exc
-
-
-def _parse_worker_response(payload: Mapping[str, object]) -> WorkerResponse:
-    try:
-        return _WORKER_RESPONSE_ADAPTER.validate_python(dict(payload))
-    except ValidationError as exc:  # pragma: no cover - defensive bridge failure
-        raise BridgeError(f"Received an invalid response from the just-bash worker: {exc}: {payload!r}") from exc
-
-
-def _parse_custom_command_event(payload: Mapping[str, object]) -> CustomCommandEvent:
-    try:
-        return _CUSTOM_COMMAND_EVENT_ADAPTER.validate_python(dict(payload))
-    except ValidationError as exc:  # pragma: no cover - defensive bridge failure
-        raise BridgeError(
-            f"Received an invalid custom command event from the just-bash worker: {exc}: {payload!r}"
-        ) from exc
-
-
-def _parse_backend_error(raw_error: object) -> BackendErrorPayload:
-    try:
-        return _BACKEND_ERROR_ADAPTER.validate_python(raw_error)
-    except ValidationError:
-        if isinstance(raw_error, str):
-            return {"message": raw_error}
-        return {}
 
 
 def write_worker_file() -> Path:
@@ -200,7 +154,7 @@ class NodeBridge:
         self,
         *,
         init_options: InitOptionsWire,
-        custom_commands: CustomCommands | None = None,
+        custom_commands: CustomCommandHandlers | None = None,
         node_command: Sequence[str] | None = None,
         js_entry: str | os.PathLike[str] | None = None,
         package_json: str | os.PathLike[str] | None = None,
@@ -435,7 +389,7 @@ class NodeBridge:
                     self._pending.pop(request_id, None)
                 raise
 
-        wait_timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT_SECONDS
+        wait_timeout = timeout if timeout is not None else DEFAULT_TIMEOUT_SECONDS
         try:
             response = response_queue.get(timeout=wait_timeout)
         except Empty as exc:
@@ -451,7 +405,7 @@ class NodeBridge:
             case {"ok": True, "result": result}:
                 return result
             case {"ok": False, "error": raw_error}:
-                error_details = _parse_backend_error(raw_error)
+                error_details = parse_backend_error(raw_error)
                 error_message = error_details.get("message") or f"Backend operation {op!r} failed"
                 raise BackendError(
                     error_message,
@@ -479,12 +433,12 @@ class NodeBridge:
 
         for line in stdout:
             try:
-                message = _parse_worker_message(line)
+                message = parse_worker_message(line)
                 if message.get("type") == "custom_command":
-                    event = _parse_custom_command_event(message)
+                    event = parse_custom_command_event(message)
                     self._dispatch_custom_command(event)
                     continue
-                response = _parse_worker_response(message)
+                response = parse_worker_response(message)
             except BridgeError as exc:
                 self._fail_all_pending(exc)
                 return
@@ -532,7 +486,7 @@ class NodeBridge:
             self.request(
                 "custom_command_complete",
                 completion_payload,
-                timeout=_DEFAULT_TIMEOUT_SECONDS,
+                timeout=DEFAULT_TIMEOUT_SECONDS,
             )
         except Exception:
             self.close()
