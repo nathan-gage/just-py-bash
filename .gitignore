@@ -6,6 +6,10 @@ __pycache__/
 .mypy_cache/
 .pyright/
 dist/
+!src/just_py_bash/_vendor/just-bash/dist/
+!src/just_py_bash/_vendor/just-bash/dist/**
+!src/just_py_bash/_vendor/just-bash/vendor/
+!src/just_py_bash/_vendor/just-bash/vendor/**
 build/
 *.egg-info/
 .env
