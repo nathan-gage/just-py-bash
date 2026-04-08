@@ -20,10 +20,6 @@ class Bash:
     just-bash semantics are preserved:
     - filesystem state is shared across ``exec`` calls
     - shell state is isolated per ``exec`` call
-
-    The keyword-heavy constructor is retained for backward compatibility.
-    New code can use :meth:`from_options` and :meth:`exec_with_options` to work
-    with explicit option models instead.
     """
 
     def __init__(
@@ -42,25 +38,22 @@ class Bash:
         js_entry: str | os.PathLike[str] | None = None,
         package_json: str | os.PathLike[str] | None = None,
     ) -> None:
-        init_options = BashOptions(
-            files=files,
-            env=env,
-            cwd=cwd,
-            execution_limits=execution_limits,
-            python=python,
-            javascript=javascript,
-            commands=commands,
-            network=network,
-            process_info=process_info,
-        ).to_wire()
-
-        self._bridge = NodeBridge(
-            init_options=init_options,
+        self._open_bridge(
+            BashOptions(
+                files=files,
+                env=env,
+                cwd=cwd,
+                execution_limits=execution_limits,
+                python=python,
+                javascript=javascript,
+                commands=commands,
+                network=network,
+                process_info=process_info,
+            ),
             node_command=node_command,
             js_entry=js_entry,
             package_json=package_json,
         )
-        self.backend_version = self._bridge.backend_version
 
     @classmethod
     def from_options(
@@ -71,20 +64,30 @@ class Bash:
         js_entry: str | os.PathLike[str] | None = None,
         package_json: str | os.PathLike[str] | None = None,
     ) -> Self:
-        return cls(
-            files=options.files,
-            env=options.env,
-            cwd=options.cwd,
-            execution_limits=options.execution_limits,
-            python=options.python,
-            javascript=options.javascript,
-            commands=options.commands,
-            network=options.network,
-            process_info=options.process_info,
+        self = cls.__new__(cls)
+        self._open_bridge(
+            options,
             node_command=node_command,
             js_entry=js_entry,
             package_json=package_json,
         )
+        return self
+
+    def _open_bridge(
+        self,
+        options: BashOptions,
+        *,
+        node_command: Sequence[str] | None,
+        js_entry: str | os.PathLike[str] | None,
+        package_json: str | os.PathLike[str] | None,
+    ) -> None:
+        self._bridge = NodeBridge(
+            init_options=options.to_wire(),
+            node_command=node_command,
+            js_entry=js_entry,
+            package_json=package_json,
+        )
+        self.backend_version = self._bridge.backend_version
 
     def __enter__(self) -> Self:
         return self
