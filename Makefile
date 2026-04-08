@@ -14,11 +14,11 @@ YAMLFIX := uv run yamlfix
 	@pnpm --version || echo 'Please install pnpm: https://pnpm.io/installation'
 
 .PHONY: install-python
-install-python: .uv ## Install Python package and development dependencies
+install-python: .uv ## Install Python development dependencies
 	uv sync --frozen
 
 .PHONY: install
-install: install-python bootstrap-just-bash build-packaged-runtime ## Install Python deps and prepare the packaged just-bash runtime
+install: install-python bootstrap-just-bash build-packaged-runtime ## Install development deps and prepare the packaged just-bash runtime
 
 .PHONY: sync
 sync: .uv ## Update local packages and uv.lock
