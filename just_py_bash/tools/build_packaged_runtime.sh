@@ -4,9 +4,11 @@ set -euo pipefail
 PACKAGE_DIR=$(cd "$(dirname "$0")/.." && pwd)
 ROOT=$(cd "$PACKAGE_DIR/.." && pwd)
 VENDOR_DIR="$ROOT/vendor/just-bash"
-OUT_DIR="$PACKAGE_DIR/src/just_bash/_vendor/just-bash"
+OUT_DIR="${JUST_BASH_PACKAGED_RUNTIME_OUT_DIR:-$PACKAGE_DIR/src/just_bash/_vendor/just-bash}"
+OUT_PARENT=$(dirname "$OUT_DIR")
+STAGING_DIR=$(mktemp -d "$OUT_PARENT/.just-bash-staging.XXXXXX")
 TMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TMP_DIR"' EXIT
+trap 'rm -rf "$TMP_DIR" "$STAGING_DIR"' EXIT
 
 if [[ ! -d "$VENDOR_DIR" ]]; then
   echo "Missing vendor/just-bash checkout" >&2
@@ -109,8 +111,10 @@ resolve_cpython_assets
 mkdir -p "$TMP_DIR/runtime/vendor"
 cp -R "$TMP_DIR/cpython-emscripten" "$TMP_DIR/runtime/vendor/cpython-emscripten"
 
+rm -rf "$STAGING_DIR"
+mkdir -p "$STAGING_DIR"
+cp "$VENDOR_DIR/package.json" "$STAGING_DIR/package.json"
+cp -R "$TMP_DIR/runtime/dist" "$STAGING_DIR/dist"
+cp -R "$TMP_DIR/runtime/vendor" "$STAGING_DIR/vendor"
 rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR"
-cp "$VENDOR_DIR/package.json" "$OUT_DIR/package.json"
-cp -R "$TMP_DIR/runtime/dist" "$OUT_DIR/dist"
-cp -R "$TMP_DIR/runtime/vendor" "$OUT_DIR/vendor"
+mv "$STAGING_DIR" "$OUT_DIR"

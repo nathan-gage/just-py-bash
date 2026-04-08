@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SUBMODULE = ROOT / "vendor" / "just-bash"
 PACKAGE_JSON = SUBMODULE / "package.json"
+PYTHON_PACKAGE_PYPROJECT = ROOT / "just_py_bash" / "pyproject.toml"
 
 
 def run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -32,12 +33,31 @@ def write_output(name: str, value: str) -> None:
         handle.write(f"{name}={value}\n")
 
 
-def read_version() -> str:
+def read_upstream_version() -> str:
     payload = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
     version = payload.get("version")
     if not isinstance(version, str):
         raise RuntimeError(f"Could not read just-bash version from {PACKAGE_JSON}")
     return version
+
+
+def read_python_package_version() -> str:
+    for raw_line in PYTHON_PACKAGE_PYPROJECT.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("version = "):
+            _, _, value = line.partition("=")
+            return value.strip().strip('"')
+    raise RuntimeError(f"Could not read just-py-bash version from {PYTHON_PACKAGE_PYPROJECT}")
+
+
+def update_python_package_version(new_version: str) -> None:
+    current_version = read_python_package_version()
+    old_line = f'version = "{current_version}"'
+    new_line = f'version = "{new_version}"'
+    text = PYTHON_PACKAGE_PYPROJECT.read_text(encoding="utf-8")
+    if old_line not in text:
+        raise RuntimeError(f"Could not find version line {old_line!r} in {PYTHON_PACKAGE_PYPROJECT}")
+    PYTHON_PACKAGE_PYPROJECT.write_text(text.replace(old_line, new_line, 1), encoding="utf-8")
 
 
 def git(*args: str, cwd: Path) -> str:
@@ -64,7 +84,8 @@ def main() -> int:
     git("fetch", "origin", "--tags", "main", cwd=SUBMODULE)
 
     from_sha = git("rev-parse", "HEAD", cwd=SUBMODULE)
-    from_version = read_version()
+    from_version = read_upstream_version()
+    python_package_from_version = read_python_package_version()
     to_sha = git("rev-parse", args.target, cwd=SUBMODULE)
 
     changed = from_sha != to_sha
@@ -73,8 +94,13 @@ def main() -> int:
         run(["pnpm", "install", "--frozen-lockfile"], cwd=SUBMODULE)
         run(["pnpm", "build"], cwd=SUBMODULE)
 
-    to_version = read_version()
+    to_version = read_upstream_version()
     version_changed = from_version != to_version
+
+    python_package_to_version = python_package_from_version
+    if version_changed and python_package_from_version != to_version:
+        update_python_package_version(to_version)
+        python_package_to_version = to_version
 
     outputs = {
         "changed": str(changed).lower(),
@@ -85,6 +111,9 @@ def main() -> int:
         "from_version": from_version,
         "to_version": to_version,
         "version_changed": str(version_changed).lower(),
+        "python_package_from_version": python_package_from_version,
+        "python_package_to_version": python_package_to_version,
+        "release_candidate": str(version_changed).lower(),
         "target": args.target,
     }
 

@@ -161,7 +161,7 @@ source = { directory = "just_bash_bundled_runtime" }
 
 [[package]]
 name = "just-py-bash"
-version = "0.1.0"
+version = "2.14.0"
 source = { editable = "just_py_bash" }
 dependencies = [
     { name = "pydantic" },

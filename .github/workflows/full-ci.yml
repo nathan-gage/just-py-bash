@@ -2,31 +2,16 @@ name: Full CI
 
 on:
   pull_request:
-    paths:
-      - just_py_bash/pyproject.toml
-      - just_py_bash/hatch_build.py
-      - just_py_bash/tools/build_packaged_runtime.sh
-      - just_bash_bundled_runtime/pyproject.toml
-      - just_bash_bundled_runtime/hatch_build.py
-      - Makefile
-      - .github/workflows/full-ci.yml
-      - .github/workflows/release.yml
-      - .github/workflows/bundled-runtime-release.yml
-      - tests/contracts/test_distributions.py
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+      - ready_for_review
   push:
     branches:
       - main
-    paths:
-      - just_py_bash/pyproject.toml
-      - just_py_bash/hatch_build.py
-      - just_py_bash/tools/build_packaged_runtime.sh
-      - just_bash_bundled_runtime/pyproject.toml
-      - just_bash_bundled_runtime/hatch_build.py
-      - Makefile
-      - .github/workflows/full-ci.yml
-      - .github/workflows/release.yml
-      - .github/workflows/bundled-runtime-release.yml
-      - tests/contracts/test_distributions.py
   workflow_dispatch:
 
 concurrency:
@@ -35,103 +20,117 @@ concurrency:
 
 jobs:
   detect:
-    name: detect version bump
+    name: detect full-ci conditions
     runs-on: ubuntu-latest
     outputs:
       run_full: ${{ steps.detect.outputs.run_full }}
-      package_version_changed: ${{ steps.detect.outputs.package_version_changed }}
-      node_provider_version_changed: ${{ steps.detect.outputs.node_provider_version_changed }}
-      package_base_version: ${{ steps.detect.outputs.package_base_version }}
-      package_head_version: ${{ steps.detect.outputs.package_head_version }}
-      node_provider_base_version: ${{ steps.detect.outputs.node_provider_base_version }}
-      node_provider_head_version: ${{ steps.detect.outputs.node_provider_head_version }}
+      release_candidate: ${{ steps.detect.outputs.release_candidate }}
+      packaging_changed: ${{ steps.detect.outputs.packaging_changed }}
+      reason: ${{ steps.detect.outputs.reason }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: recursive
 
-      - name: Detect whether project version changed
+      - name: Detect whether full CI should run
         id: detect
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE_SHA: ${{ github.event.before || '' }}
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
         run: |
           python - <<'PY' >> "$GITHUB_OUTPUT"
+          from __future__ import annotations
+
+          import fnmatch
+          import json
           import os
           import subprocess
-          import tomllib
-          from pathlib import Path
 
-          event_name = os.environ["EVENT_NAME"]
-          base_sha = os.environ.get("BASE_SHA", "")
-          head_sha = os.environ["HEAD_SHA"]
+          PACKAGING_PATTERNS = [
+              ".github/workflows/*",
+              "Makefile",
+              "pyproject.toml",
+              "uv.lock",
+              "just_py_bash/pyproject.toml",
+              "just_py_bash/hatch_build.py",
+              "just_py_bash/tools/*",
+              "just_bash_bundled_runtime/pyproject.toml",
+              "just_bash_bundled_runtime/hatch_build.py",
+              "just_bash_bundled_runtime/tools/*",
+              "tests/contracts/test_distributions.py",
+          ]
 
-          def read_head_version(path: str) -> str:
-              payload = tomllib.loads(Path(path).read_text())
-              return str(payload["project"]["version"])
+          def changed_files(base: str, head: str, *, use_merge_base: bool) -> list[str]:
+              if not base or set(base) == {"0"}:
+                  return []
 
-          def read_version(revision: str, path: str) -> str:
+              separator = "..." if use_merge_base else ".."
               completed = subprocess.run(
-                  ["git", "show", f"{revision}:{path}"],
+                  ["git", "diff", "--name-only", f"{base}{separator}{head}"],
                   check=False,
                   capture_output=True,
                   text=True,
               )
               if completed.returncode != 0:
-                  return ""
-              payload = tomllib.loads(completed.stdout)
-              return str(payload["project"]["version"])
+                  raise RuntimeError(completed.stderr.strip() or "git diff failed")
+              return [line for line in completed.stdout.splitlines() if line]
+
+          def matches_packaging_paths(paths: list[str]) -> bool:
+              return any(
+                  any(fnmatch.fnmatch(path, pattern) for pattern in PACKAGING_PATTERNS)
+                  for path in paths
+              )
+
+          event_name = os.environ["EVENT_NAME"]
+          parsed_labels = json.loads(os.environ.get("PR_LABELS_JSON") or "[]")
+          if not isinstance(parsed_labels, list):
+              parsed_labels = []
+          labels = {str(label) for label in parsed_labels}
+          release_candidate = "release-candidate" in labels
+          packaging_changed = False
+          reason_parts: list[str] = []
 
           if event_name == "workflow_dispatch":
-              package_head_version = read_head_version("just_py_bash/pyproject.toml")
-              node_provider_head_version = read_head_version("just_bash_bundled_runtime/pyproject.toml")
-              print("run_full=true")
-              print("package_version_changed=true")
-              print("node_provider_version_changed=true")
-              print("package_base_version=")
-              print(f"package_head_version={package_head_version}")
-              print("node_provider_base_version=")
-              print(f"node_provider_head_version={node_provider_head_version}")
-              raise SystemExit(0)
+              run_full = True
+              release_candidate = True
+              packaging_changed = True
+              reason_parts.append("workflow_dispatch")
+          elif event_name == "pull_request":
+              files = changed_files(os.environ.get("BASE_SHA", ""), os.environ["HEAD_SHA"], use_merge_base=True)
+              packaging_changed = matches_packaging_paths(files)
+              if release_candidate:
+                  reason_parts.append("release-candidate label")
+              if packaging_changed:
+                  reason_parts.append("packaging/workflow changes")
+              run_full = release_candidate or packaging_changed
+          elif event_name == "push":
+              files = changed_files(os.environ.get("BEFORE_SHA", ""), os.environ["HEAD_SHA"], use_merge_base=False)
+              packaging_changed = matches_packaging_paths(files)
+              if packaging_changed:
+                  reason_parts.append("packaging/workflow changes on main")
+              run_full = packaging_changed
+          else:
+              run_full = False
 
-          package_base_version = (
-              "" if not base_sha or set(base_sha) == {"0"} else read_version(base_sha, "just_py_bash/pyproject.toml")
-          )
-          package_head_version = read_version(head_sha, "just_py_bash/pyproject.toml")
-          node_provider_base_version = (
-              ""
-              if not base_sha or set(base_sha) == {"0"}
-              else read_version(base_sha, "just_bash_bundled_runtime/pyproject.toml")
-          )
-          node_provider_head_version = read_version(head_sha, "just_bash_bundled_runtime/pyproject.toml")
-
-          package_version_changed = "true" if package_base_version != package_head_version else "false"
-          node_provider_version_changed = "true" if node_provider_base_version != node_provider_head_version else "false"
-          run_full = "true" if package_version_changed == "true" or node_provider_version_changed == "true" else "false"
-
-          print(f"run_full={run_full}")
-          print(f"package_version_changed={package_version_changed}")
-          print(f"node_provider_version_changed={node_provider_version_changed}")
-          print(f"package_base_version={package_base_version}")
-          print(f"package_head_version={package_head_version}")
-          print(f"node_provider_base_version={node_provider_base_version}")
-          print(f"node_provider_head_version={node_provider_head_version}")
+          reason = ", ".join(reason_parts) if reason_parts else "no full-ci trigger"
+          print(f"run_full={'true' if run_full else 'false'}")
+          print(f"release_candidate={'true' if release_candidate else 'false'}")
+          print(f"packaging_changed={'true' if packaging_changed else 'false'}")
+          print(f"reason={reason}")
           PY
 
       - name: Report decision
         run: |
           echo "run_full=${{ steps.detect.outputs.run_full }}"
-          echo "package_version_changed=${{ steps.detect.outputs.package_version_changed }}"
-          echo "node_provider_version_changed=${{ steps.detect.outputs.node_provider_version_changed }}"
-          echo "package_base_version=${{ steps.detect.outputs.package_base_version }}"
-          echo "package_head_version=${{ steps.detect.outputs.package_head_version }}"
-          echo "node_provider_base_version=${{ steps.detect.outputs.node_provider_base_version }}"
-          echo "node_provider_head_version=${{ steps.detect.outputs.node_provider_head_version }}"
+          echo "release_candidate=${{ steps.detect.outputs.release_candidate }}"
+          echo "packaging_changed=${{ steps.detect.outputs.packaging_changed }}"
+          echo "reason=${{ steps.detect.outputs.reason }}"
 
   full:
     name: full / ubuntu / py3.11 / node22
@@ -172,8 +171,11 @@ jobs:
       - name: Vendor bundled runtime payload
         run: make vendor-bundled-runtime
 
-      - name: Run CI check suite
+      - name: Run full CI check suite
         run: make all-ci
+
+      - name: Build main package distributions
+        run: uv build just_py_bash --out-dir dist
 
   bundled-node:
     name: bundled-node / ubuntu / py3.11
@@ -215,7 +217,7 @@ jobs:
         run: make vendor-bundled-runtime
 
       - name: Install bundled Node provider package
-        run: uv pip install just_bash_bundled_runtime
+        run: uv pip install ./just_bash_bundled_runtime
 
       - name: Verify bundled Node works without a system node on PATH
         run: |
@@ -285,8 +287,73 @@ jobs:
         with:
           version: 8.15.9
 
-      - name: Install dependencies and build vendored just-bash backend
-        run: make install
+      - name: Sync Python dependencies
+        run: uv sync --all-groups
+
+      - name: Build vendored just-bash backend
+        working-directory: vendor/just-bash
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
 
       - name: Run non-packaging test suite
         run: uv run pytest -q -m "not packaging"
+
+  bundled-runtime-packaging:
+    name: bundled-runtime wheel / ${{ matrix.os }}
+    needs: detect
+    if: needs.detect.outputs.run_full == 'true'
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-13
+          - macos-14
+          - windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Vendor bundled runtime payload
+        run: python just_bash_bundled_runtime/tools/vendor_runtime.py
+
+      - name: Build bundled runtime wheel
+        run: uv build just_bash_bundled_runtime --wheel --out-dir dist-node
+
+      - name: Smoke test bundled runtime wheel
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          wheel = next(Path('dist-node').glob('*.whl'))
+          install = subprocess.run([sys.executable, '-m', 'pip', 'install', '--force-reinstall', str(wheel)], check=False)
+          if install.returncode != 0:
+              raise SystemExit(install.returncode)
+
+          from just_bash_bundled_runtime import get_node_command, get_runtime_metadata
+
+          completed = subprocess.run([*get_node_command(), '--version'], check=False, capture_output=True, text=True)
+          if completed.returncode != 0:
+              raise SystemExit(completed.returncode)
+
+          metadata = get_runtime_metadata()
+          print(metadata['node_version'])
+          print(metadata['platform'])
+          print(completed.stdout.strip())
+          PY

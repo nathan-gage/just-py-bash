@@ -35,9 +35,21 @@ jobs:
       - name: Sync Python dependencies
         run: uv sync --all-groups
 
+      - name: Ensure automation labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create automation --color 0E8A16 --description "Automated pull request" --force
+          gh label create bundled-runtime --color 5319E7 --description "Updates the bundled Node runtime package" --force
+          gh label create release-candidate --color B60205 --description "Run full CI and consider this PR for a manual release" --force
+
       - name: Sync bundled runtime version
         id: sync
         run: uv run python just_bash_bundled_runtime/tools/sync_version.py
+
+      - name: Refresh uv.lock after version bump
+        if: steps.sync.outputs.changed == 'true'
+        run: uv lock
 
       - name: Create pull request
         if: steps.sync.outputs.changed == 'true'
@@ -59,6 +71,8 @@ jobs:
             - major line: `${{ steps.sync.outputs.target_major }}`
 
             This PR updates `just_bash_bundled_runtime/pyproject.toml` to the latest Node.js LTS patch in the tracked major line.
+            It is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite before you decide whether to merge and publish it.
           labels: |
             automation
             bundled-runtime
+            release-candidate

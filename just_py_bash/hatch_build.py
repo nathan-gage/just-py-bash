@@ -68,4 +68,3 @@ def packaged_runtime_ready(runtime_root: Path) -> bool:
         return False
 
     return runtime_root.joinpath("vendor", "cpython-emscripten").is_dir()
-

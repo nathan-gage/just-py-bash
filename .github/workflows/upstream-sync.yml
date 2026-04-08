@@ -49,21 +49,57 @@ jobs:
         with:
           version: 8.15.9
 
-      - name: Sync Python dependencies
-        run: uv sync --all-groups
+      - name: Ensure automation labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create automation --color 0E8A16 --description "Automated pull request" --force
+          gh label create upstream-sync --color 1D76DB --description "Updates the vendored just-bash checkout" --force
+          gh label create release-candidate --color B60205 --description "Run full CI and consider this PR for a manual release" --force
 
       - name: Sync upstream just-bash
         id: sync
         run: >-
-          uv run python just_py_bash/tools/sync_just_bash.py
+          python just_py_bash/tools/sync_just_bash.py
           --target "${{ github.event.inputs.target_ref || 'origin/main' }}"
 
-      - name: Run full checks
-        if: steps.sync.outputs.changed == 'true'
-        run: make all-ci
+      - name: Refresh uv.lock after version bump
+        if: steps.sync.outputs.version_changed == 'true'
+        run: uv lock
 
-      - name: Create pull request
-        if: steps.sync.outputs.changed == 'true'
+      - name: Create release-candidate pull request
+        if: steps.sync.outputs.changed == 'true' && steps.sync.outputs.release_candidate == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: automation/sync-just-bash
+          delete-branch: true
+          commit-message: >-
+            chore: sync just-bash to
+            ${{ steps.sync.outputs.to_version }}
+            (${{ steps.sync.outputs.to_sha_short }})
+          title: >-
+            chore: sync just-bash to
+            ${{ steps.sync.outputs.to_version }}
+            (${{ steps.sync.outputs.to_sha_short }})
+          body: |
+            Automated upstream sync.
+
+            - upstream ref: `${{ github.event.inputs.target_ref || 'origin/main' }}`
+            - previous sha: `${{ steps.sync.outputs.from_sha }}`
+            - new sha: `${{ steps.sync.outputs.to_sha }}`
+            - previous upstream version: `${{ steps.sync.outputs.from_version }}`
+            - new upstream version: `${{ steps.sync.outputs.to_version }}`
+            - previous `just-py-bash` version: `${{ steps.sync.outputs.python_package_from_version }}`
+            - new `just-py-bash` version: `${{ steps.sync.outputs.python_package_to_version }}`
+
+            This PR is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite. If that suite passes and the PR is merged, the new version can be published with the manual release workflow.
+          labels: |
+            automation
+            upstream-sync
+            release-candidate
+
+      - name: Create non-release pull request
+        if: steps.sync.outputs.changed == 'true' && steps.sync.outputs.release_candidate != 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           branch: automation/sync-just-bash
@@ -82,11 +118,11 @@ jobs:
             - upstream ref: `${{ github.event.inputs.target_ref || 'origin/main' }}`
             - previous sha: `${{ steps.sync.outputs.from_sha }}`
             - new sha: `${{ steps.sync.outputs.to_sha }}`
-            - previous version: `${{ steps.sync.outputs.from_version }}`
-            - new version: `${{ steps.sync.outputs.to_version }}`
-            - version changed: `${{ steps.sync.outputs.version_changed }}`
+            - previous upstream version: `${{ steps.sync.outputs.from_version }}`
+            - new upstream version: `${{ steps.sync.outputs.to_version }}`
+            - `just-py-bash` version remains: `${{ steps.sync.outputs.python_package_to_version }}`
 
-            This PR was generated after rebuilding `vendor/just-bash` and running `make all-ci`.
+            Upstream changed without a new upstream package version, so this PR is not marked as a release candidate by default.
           labels: |
             automation
             upstream-sync

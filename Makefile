@@ -13,7 +13,7 @@ install-python: .uv ## Install Python package and development dependencies
 	uv sync --frozen
 
 .PHONY: install
-install: install-python bootstrap-just-bash ## Install Python deps and build vendored just-bash backend
+install: install-python bootstrap-just-bash build-packaged-runtime ## Install Python deps and prepare the packaged just-bash runtime
 
 .PHONY: sync
 sync: .uv ## Update local packages and uv.lock
@@ -29,6 +29,10 @@ setup: install ## Backward-compatible alias for install
 .PHONY: vendor-bundled-runtime
 vendor-bundled-runtime: .uv ## Download and verify the official Node runtime for just_bash_bundled_runtime
 	uv run python just_bash_bundled_runtime/tools/vendor_runtime.py
+
+.PHONY: build-packaged-runtime
+build-packaged-runtime: bootstrap-just-bash ## Build the packaged just-bash runtime payload used by the Python wrapper
+	bash just_py_bash/tools/build_packaged_runtime.sh
 
 .PHONY: build-package
 build-package: bootstrap-just-bash ## Build wheel and sdist for just-py-bash
@@ -67,8 +71,12 @@ typecheck-mypy: ## Run static type checking with Mypy
 typecheck: typecheck-pyright typecheck-mypy ## Run static type checking
 
 .PHONY: test
-test: ## Run tests without coverage (fast, for local dev)
+test: ## Run the full test suite without coverage
 	COLUMNS=150 uv run pytest -n auto --dist=loadgroup --durations=10
+
+.PHONY: test-non-packaging
+test-non-packaging: ## Run the non-packaging test suite
+	COLUMNS=150 uv run pytest -n auto --dist=loadgroup --durations=10 -m "not packaging"
 
 .PHONY: testcov
 testcov: ## Run tests with coverage and generate an HTML report
@@ -82,7 +90,7 @@ testcov: ## Run tests with coverage and generate an HTML report
 all: format lint typecheck test ## Run the standard local development checks
 
 .PHONY: all-ci
-all-ci: format-check lint typecheck testcov ## Run the CI check suite
+all-ci: format-check lint typecheck testcov ## Run the full CI check suite
 
 .PHONY: help
 help: ## Show this help (usage: make help)

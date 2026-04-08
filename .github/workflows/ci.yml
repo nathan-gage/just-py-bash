@@ -11,8 +11,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linux:
-    name: linux / py3.11 / node22
+  cheap:
+    name: cheap / ubuntu / py3.11 / node22
     runs-on: ubuntu-latest
 
     steps:
@@ -44,9 +44,6 @@ jobs:
       - name: Install dependencies and build vendored just-bash backend
         run: make install
 
-      - name: Vendor bundled runtime payload
-        run: make vendor-bundled-runtime
-
       - name: Format check
         run: make format-check
 
@@ -59,5 +56,5 @@ jobs:
       - name: Typecheck (pyright)
         run: make typecheck-pyright
 
-      - name: Test
-        run: make test
+      - name: Run non-packaging test suite
+        run: make test-non-packaging

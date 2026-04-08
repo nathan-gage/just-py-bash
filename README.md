@@ -300,9 +300,11 @@ make test
 
 Common recipes:
 
-- `make install` — install Python dependencies and bootstrap the vendored `vendor/just-bash` backend
-- `make all` — local developer loop: format, lint, typecheck, and run tests
-- `make all-ci` — CI-oriented checks: format verification, lint, typecheck, and coverage tests
+- `make install` — install Python dependencies, bootstrap `vendor/just-bash`, and prepare the packaged runtime payload used by the Python wrapper
+- `make all` — local developer loop: format, lint, typecheck, and run the full test suite
+- `make all-ci` — release-candidate / packaging checks: format verification, lint, typecheck, and coverage tests
+- `make test-non-packaging` — run the fast test suite used by the cheap CI workflow
+- `make build-packaged-runtime` — rebuild the packaged runtime payload under `src/just_bash/_vendor/just-bash`
 - `make build-package` — build the main `just-py-bash` wheel and sdist
 - `make build-bundled-runtime` — build the companion `just-bash-bundled-runtime` wheel
 - `make clean` — remove generated build artifacts
@@ -324,6 +326,14 @@ uv add ./just_bash_bundled_runtime
 ```
 
 The repo's own workspace is already wired to use the local package during `uv sync`.
+
+### Versioning and release flow
+
+- When upstream `just-bash` releases `X.Y.Z`, `just-py-bash` aims to release the matching version `X.Y.Z`.
+- If the Python wrapper needs a follow-up release without a new upstream `just-bash` version, use a PEP 440 post-release such as `X.Y.Z.post1`.
+- To cut a Python-only follow-up release, bump `just_py_bash/pyproject.toml` to `X.Y.Z.postN`, merge the PR after it passes CI, and then run the manual `Release just-py-bash` workflow against `main` (or the specific ref you want to publish).
+- PRs intended to become releases should be labeled `release-candidate`. That label triggers the expensive Full CI workflow, including packaging and compatibility coverage.
+- Merging to `main` does **not** publish automatically. Publishing is a separate manual step via the release workflows after the relevant PR has passed Full CI.
 
 ## Conformance Testing
 
