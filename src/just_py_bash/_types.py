@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
-from typing import Final, Literal, NotRequired, Protocol, TypeAlias, TypeGuard
+from collections.abc import Mapping, Sequence
+from typing import Final, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -162,41 +162,3 @@ class BackendErrorPayload(TypedDict, total=False):
 
 
 WorkerResponse: TypeAlias = WorkerSuccessResponse | WorkerErrorResponse
-
-
-class ObjectItems(Protocol):
-    def items(self) -> Iterable[tuple[object, object]]: ...
-
-
-class StringObjectItems(Protocol):
-    def items(self) -> Iterable[tuple[str, object]]: ...
-
-
-class StringStringItems(Protocol):
-    def items(self) -> Iterable[tuple[str, str]]: ...
-
-
-def has_object_items(value: object) -> TypeGuard[ObjectItems]:
-    return isinstance(value, Mapping)
-
-
-def is_string_object_mapping(value: object) -> TypeGuard[StringObjectItems]:
-    return has_object_items(value) and all(isinstance(key, str) for key, _ in value.items())
-
-
-def is_string_string_mapping(value: object) -> TypeGuard[StringStringItems]:
-    return has_object_items(value) and all(
-        isinstance(key, str) and isinstance(item, str) for key, item in value.items()
-    )
-
-
-def to_string_object_dict(value: object) -> dict[str, object] | None:
-    if not is_string_object_mapping(value):
-        return None
-    return dict(value.items())
-
-
-def to_string_string_dict(value: object) -> dict[str, str] | None:
-    if not is_string_string_mapping(value):
-        return None
-    return dict(value.items())

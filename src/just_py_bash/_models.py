@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Final, TypeAlias
 
-from pydantic import ConfigDict, Field, TypeAdapter
+from pydantic import ConfigDict, Field, StrictInt, StrictStr, TypeAdapter
 from pydantic.alias_generators import to_camel
 from pydantic.dataclasses import dataclass
 
@@ -16,10 +16,9 @@ _MODEL_CONFIG: Final = ConfigDict(
     alias_generator=to_camel,
     extra="ignore",
     populate_by_name=True,
-    strict=True,
     validate_assignment=True,
 )
-NonNegativeLimit: TypeAlias = Annotated[int | None, Field(default=None, ge=0)]
+NonNegativeLimit: TypeAlias = Annotated[StrictInt | None, Field(default=None, ge=0)]
 
 
 @dataclass(config=_MODEL_CONFIG, kw_only=True, slots=True)
@@ -54,7 +53,7 @@ class ExecutionLimits:
 class JavaScriptConfig:
     """Validated configuration for just-bash's optional QuickJS runtime."""
 
-    bootstrap: str | None = None
+    bootstrap: StrictStr | None = None
 
     def to_wire(self) -> JavaScriptConfigWire:
         payload = _JAVASCRIPT_CONFIG_ADAPTER.dump_python(self, by_alias=True, exclude_none=True)
@@ -65,10 +64,10 @@ class JavaScriptConfig:
 class ExecResult:
     """Validated result from :meth:`just_py_bash.Bash.exec`."""
 
-    stdout: str = ""
-    stderr: str = ""
-    exit_code: int = 0
-    env: dict[str, str] = Field(default_factory=dict)
+    stdout: StrictStr = ""
+    stderr: StrictStr = ""
+    exit_code: StrictInt = 0
+    env: dict[str, StrictStr] = Field(default_factory=dict)
     metadata: dict[str, object] | None = None
 
     @classmethod

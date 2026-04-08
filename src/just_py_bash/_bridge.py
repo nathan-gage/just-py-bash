@@ -77,6 +77,8 @@ def _parse_backend_error(raw_error: object) -> BackendErrorPayload:
     try:
         return _BACKEND_ERROR_ADAPTER.validate_python(raw_error)
     except ValidationError:
+        if isinstance(raw_error, str):
+            return {"message": raw_error}
         return {}
 
 
@@ -445,7 +447,7 @@ class NodeBridge:
     def _read_stdout(self) -> None:
         stdout = self._proc.stdout
         if stdout is None:
-            self._fail_all_pending(BridgeError("just-py-bash worker stdout is unavailable"))
+            self._fail_all_pending(BridgeError("just-bash worker stdout is unavailable"))
             return
 
         for line in stdout:
