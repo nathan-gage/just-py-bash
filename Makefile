@@ -4,6 +4,10 @@
 .uv: ## Check that uv is installed
 	@uv --version || echo 'Please install uv: https://docs.astral.sh/uv/getting-started/installation/'
 
+.PHONY: .pnpm
+.pnpm: ## Check that pnpm is installed
+	@pnpm --version || echo 'Please install pnpm: https://pnpm.io/installation'
+
 .PHONY: install
 install: .uv ## Install the package and development dependencies
 	uv sync --frozen
@@ -11,6 +15,13 @@ install: .uv ## Install the package and development dependencies
 .PHONY: sync
 sync: .uv ## Update local packages and uv.lock
 	uv sync
+
+.PHONY: bootstrap-just-bash
+bootstrap-just-bash: .pnpm ## Install and build vendored just-bash backend
+	cd vendor/just-bash && pnpm install && pnpm build
+
+.PHONY: setup
+setup: install bootstrap-just-bash ## Install Python deps and build vendored just-bash backend
 
 .PHONY: format
 format: ## Format the code
@@ -22,9 +33,16 @@ lint: ## Lint the code
 	uv run ruff format --check
 	uv run ruff check
 
-.PHONY: typecheck
-typecheck: ## Run static type checking
+.PHONY: typecheck-pyright
+typecheck-pyright: ## Run static type checking with Pyright
 	PYRIGHT_PYTHON_IGNORE_WARNINGS=1 uv run pyright
+
+.PHONY: typecheck-mypy
+typecheck-mypy: ## Run static type checking with Mypy
+	uv run mypy
+
+.PHONY: typecheck
+typecheck: typecheck-pyright typecheck-mypy ## Run static type checking
 
 .PHONY: test
 test: ## Run tests without coverage (fast, for local dev)
