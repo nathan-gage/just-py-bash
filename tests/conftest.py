@@ -10,9 +10,13 @@ if TYPE_CHECKING:
     from tests.support.harness import BackendArtifacts
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+PACKAGE_SRCS = [
+    ROOT / "just_bash_bundled_runtime" / "src",
+    ROOT / "just_py_bash" / "src",
+]
+for src in reversed(PACKAGE_SRCS):
+    if str(src) not in sys.path:
+        sys.path.insert(0, str(src))
 
 
 @pytest.fixture(scope="session")

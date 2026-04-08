@@ -1,0 +1,34 @@
+[project]
+name = "just-bash-bundled-runtime"
+version = "22.22.2"
+description = "First-party bundled Node.js runtime provider for just-py-bash"
+readme = "README.md"
+authors = [
+    { name = "Nathan Gage", email = "nathan@sweetspot.so" }
+]
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+just_bash_bundled_runtime = [
+    "py.typed",
+    "runtime/**/*",
+    "runtime-metadata.json",
+]

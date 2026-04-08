@@ -5,12 +5,15 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 from tests.support.harness import ROOT
+
+PACKAGE_ROOT = ROOT / "just_py_bash"
 
 pytestmark = [
     pytest.mark.contract,
@@ -44,7 +47,7 @@ def build_distribution(kind: str, dist_dir: Path) -> Path:
     if not uv:
         raise NotImplementedError("uv is required to exercise the packaging flow")
 
-    command = [uv, "build", f"--{kind}", "--out-dir", str(dist_dir)]
+    command = [uv, "build", str(PACKAGE_ROOT), f"--{kind}", "--out-dir", str(dist_dir)]
     completed = subprocess.run(
         command,
         cwd=ROOT,
@@ -219,3 +222,14 @@ def test_installed_sdist_console_script_runs_without_repo_checkout(
 
     assert completed.stdout == "sdist-cli"
     assert completed.stderr == ""
+
+
+def test_wheel_declares_explicit_node_extra(tmp_path: Path) -> None:
+    wheel = build_distribution("wheel", tmp_path / "dist")
+
+    with zipfile.ZipFile(wheel) as archive:
+        metadata_name = next(name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
+        metadata = archive.read(metadata_name).decode("utf-8")
+
+    assert "Provides-Extra: node" in metadata
+    assert "Requires-Dist: just-bash-bundled-runtime>=22,<23 ; extra == 'node'" in metadata

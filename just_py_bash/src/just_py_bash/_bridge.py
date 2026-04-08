@@ -27,6 +27,7 @@ from ._bridge_protocol import (
 )
 from ._custom_commands import CustomCommandContext, CustomCommandHandlers, command_error_result, invoke_custom_command
 from ._exceptions import BackendError, BackendUnavailableError, BridgeError, BridgeTimeoutError
+from ._node_provider import resolve_bundled_node_command
 from ._types import (
     BytesPayload,
     CustomCommandCompleteRequestPayload,
@@ -81,10 +82,14 @@ def resolve_node_command(node_command: Sequence[str] | None = None) -> list[str]
     if configured := os.environ.get("JUST_PY_BASH_NODE"):
         return shlex.split(configured)
 
+    bundled = resolve_bundled_node_command()
+    if bundled is not None:
+        return bundled
+
     node = shutil.which("node")
     if not node:
         raise BackendUnavailableError(
-            "Could not find a Node.js executable. Install Node.js or set "
+            "Could not find a Node.js executable. Install Node.js, install just-py-bash[node], or set "
             "JUST_PY_BASH_NODE to the command that should run the backend.",
         )
     return [node]
@@ -117,7 +122,7 @@ def resolve_backend_artifacts(
         )
 
     package_dir = Path(__file__).resolve().parent
-    repo_root = package_dir.parents[1]
+    repo_root = package_dir.parents[2]
     candidate_roots = [
         package_dir / "_vendor" / "just-bash",
         repo_root / "vendor" / "just-bash",

@@ -81,7 +81,7 @@ Disallowed from tests:
 - `just_py_bash._bridge`
 - `just_py_bash._api`
 - `just_py_bash._models`
-- any private helper under `src/just_py_bash/_*`
+- any private helper under `just_py_bash/src/just_py_bash/_*`
 
 If a test needs functionality that only exists in a private helper, re-create the minimum test-only helper under `tests/support/` instead.
 

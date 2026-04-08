@@ -155,17 +155,40 @@ wheels = [
 ]
 
 [[package]]
+name = "just-bash-bundled-runtime"
+version = "22.22.2"
+source = { directory = "just_bash_bundled_runtime" }
+
+[[package]]
 name = "just-py-bash"
 version = "0.1.0"
-source = { editable = "." }
+source = { editable = "just_py_bash" }
 dependencies = [
     { name = "pydantic" },
 ]
+
+[package.optional-dependencies]
+node = [
+    { name = "just-bash-bundled-runtime" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "just-bash-bundled-runtime", marker = "extra == 'node'", directory = "just_bash_bundled_runtime" },
+    { name = "pydantic", specifier = ">=2.10" },
+]
+provides-extras = ["node"]
+
+[[package]]
+name = "just-py-bash-workspace"
+version = "0.0.0"
+source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
     { name = "coverage", extra = ["toml"] },
     { name = "hypothesis" },
+    { name = "just-py-bash", extra = ["node"] },
     { name = "pytest" },
     { name = "pytest-xdist" },
 ]
@@ -176,12 +199,12 @@ lint = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic", specifier = ">=2.10" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.10.7" },
     { name = "hypothesis", specifier = ">=6.142.4" },
+    { name = "just-py-bash", extras = ["node"], editable = "just_py_bash" },
     { name = "pytest", specifier = ">=9.0.0" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
 ]

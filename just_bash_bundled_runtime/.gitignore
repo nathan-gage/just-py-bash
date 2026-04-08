@@ -1,0 +1,5 @@
+dist/
+build/
+*.egg-info/
+src/just_bash_bundled_runtime/runtime/
+src/just_bash_bundled_runtime/runtime-metadata.json

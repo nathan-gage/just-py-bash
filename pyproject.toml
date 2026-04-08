@@ -1,23 +1,14 @@
 [project]
-name = "just-py-bash"
-version = "0.1.0"
-description = "A Python wrapper around the just-bash virtual shell"
-readme = "README.md"
-authors = [
-    { name = "Nathan Gage", email = "nathan@sweetspot.so" }
-]
+name = "just-py-bash-workspace"
+version = "0.0.0"
 requires-python = ">=3.11"
-dependencies = [
-    "pydantic>=2.10",
-]
-
-[project.scripts]
-just-py-bash = "just_py_bash:main"
+dependencies = []
 
 [dependency-groups]
 dev = [
     "coverage[toml]>=7.10.7",
     "hypothesis>=6.142.4",
+    "just-py-bash[node]",
     "pytest>=9.0.0",
     "pytest-xdist>=3.6.1",
 ]
@@ -28,12 +19,18 @@ lint = [
 ]
 
 [tool.uv]
+package = false
 default-groups = ["dev", "lint"]
+
+[tool.uv.sources]
+just-py-bash = { path = "just_py_bash", editable = true }
+just-bash-bundled-runtime = { path = "just_bash_bundled_runtime", editable = true }
 
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-include = ["src/**/*.py", "tests/**/*.py"]
+include = ["just_py_bash/src/**/*.py", "just_bash_bundled_runtime/src/**/*.py", "tests/**/*.py", "scripts/**/*.py"]
+extend-exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime"]
 
 [tool.ruff.lint]
 extend-select = [
@@ -54,18 +51,21 @@ pythonVersion = "3.11"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
 reportUnnecessaryTypeIgnoreComment = true
-include = ["src", "tests"]
+include = ["just_py_bash/src", "just_bash_bundled_runtime/src", "tests", "scripts"]
+exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime"]
 venvPath = "."
 venv = ".venv"
 executionEnvironments = [
-    { root = ".", extraPaths = ["src"] },
-    { root = "tests", extraPaths = ["src"], reportPrivateImportUsage = false },
+    { root = ".", extraPaths = ["just_py_bash/src", "just_bash_bundled_runtime/src"] },
+    { root = "tests", extraPaths = ["just_py_bash/src", "just_bash_bundled_runtime/src"], reportPrivateImportUsage = false },
+    { root = "just_bash_bundled_runtime/src", extraPaths = ["just_bash_bundled_runtime/src"] },
 ]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src", "tests"]
-mypy_path = "src"
+files = ["just_py_bash/src", "just_bash_bundled_runtime/src", "tests", "scripts"]
+exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/"]
+mypy_path = "just_py_bash/src"
 strict = true
 
 [tool.pytest.ini_options]
@@ -86,11 +86,11 @@ patch = ["subprocess"]
 concurrency = ["multiprocessing", "thread"]
 branch = true
 data_file = ".coverage/.coverage"
-source = ["src/just_py_bash"]
+source = ["just_py_bash/src/just_py_bash"]
 
 [tool.coverage.paths]
 source = [
-    "src/just_py_bash",
+    "just_py_bash/src/just_py_bash",
     "*/site-packages/just_py_bash",
     "*\\site-packages\\just_py_bash",
 ]
@@ -106,7 +106,3 @@ exclude_lines = [
     "@overload",
     "if __name__ == .__main__.:",
 ]
-
-[build-system]
-requires = ["uv_build>=0.11.2,<0.12.0"]
-build-backend = "uv_build"

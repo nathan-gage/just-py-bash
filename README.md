@@ -19,7 +19,19 @@ Each session owns a dedicated Node.js worker process and a real upstream `just-b
 uv add just-py-bash
 ```
 
-A working Node.js runtime is still required at execution time.
+By default, `just-py-bash` uses a system-provided Node.js runtime.
+
+For an explicit bundled-Node install, the intended end-user interface is:
+
+```bash
+uv add 'just-py-bash[node]'
+```
+
+That extra is backed by the first-party `just-bash-bundled-runtime` companion package. Until that companion package is published, local development installs can use:
+
+```bash
+uv add ./just_bash_bundled_runtime
+```
 
 ## Quick Start
 
@@ -259,7 +271,14 @@ if not result.ok:
 
 ## Backend Selection
 
-By default the package uses its vendored `just-bash` runtime. To point at a different backend artifact, set:
+By default the package uses its vendored `just-bash` runtime and resolves Node.js in this order:
+
+1. `node_command=` passed to `Bash(...)` or `AsyncBash(...)`
+2. `JUST_PY_BASH_NODE`
+3. the first-party bundled Node provider installed by `just-py-bash[node]`
+4. a system `node` on `PATH`
+
+To point at a different `just-bash` backend artifact, set:
 
 - `JUST_PY_BASH_JS_ENTRY`
 - `JUST_PY_BASH_PACKAGE_JSON`
@@ -280,7 +299,7 @@ make install
 make test
 ```
 
-`make install` installs the Python dependencies and bootstraps the vendored `vendor/just-bash` backend. Run `make help` to see the other available development commands.
+`make install` installs the Python dependencies and bootstraps the vendored `vendor/just-bash` backend. If you also want to build the first-party bundled Node companion package locally, run `make build-bundled-runtime` (or the backward-compatible alias `make build-node-provider`). Run `make help` to see the other available development commands.
 
 ## Conformance Testing
 
