@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref }}
@@ -92,18 +92,18 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ needs.detect.outputs.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v8
 
       - name: Vendor bundled runtime payload
         run: python just_bash_bundled_runtime/tools/vendor_runtime.py
@@ -136,7 +136,7 @@ jobs:
           PY
 
       - name: Upload bundled runtime wheel artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bundled-runtime-${{ matrix.os }}
           path: dist-node/*
@@ -153,13 +153,21 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ needs.detect.outputs.ref }}
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8
+
       - name: Download wheel artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: bundled-runtime-*
           merge-multiple: true
@@ -175,16 +183,13 @@ jobs:
           git push origin "$TAG"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.detect.outputs.tag }}
-          name: just-bash-bundled-runtime ${{ needs.detect.outputs.version }}
-          generate_release_notes: true
-          files: |
-            dist-node/*
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.detect.outputs.tag }}
+        run: >-
+          gh release create "$TAG" dist-node/*
+          --title "just-bash-bundled-runtime ${{ needs.detect.outputs.version }}"
+          --generate-notes
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist-node/
-          skip-existing: true
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist-node/*
