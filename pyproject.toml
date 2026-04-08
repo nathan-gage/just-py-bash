@@ -1,7 +1,7 @@
 [project]
 name = "just-py-bash"
 version = "0.1.0"
-description = "python bindings for just-bash"
+description = "A Python wrapper around the just-bash virtual shell"
 readme = "README.md"
 authors = [
     { name = "Nathan Gage", email = "nathan@sweetspot.so" }
@@ -11,6 +11,77 @@ dependencies = []
 
 [project.scripts]
 just-py-bash = "just_py_bash:main"
+
+[dependency-groups]
+dev = [
+    "coverage[toml]>=7.10.7",
+    "pytest>=9.0.0",
+    "pytest-xdist>=3.6.1",
+]
+lint = [
+    "pyright>=1.1.408",
+    "ruff>=0.14.14",
+]
+
+[tool.uv]
+default-groups = ["dev", "lint"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+include = ["src/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+extend-select = [
+    "B",
+    "I",
+    "Q",
+    "RUF100",
+    "UP",
+]
+flake8-quotes = { inline-quotes = "double", multiline-quotes = "double" }
+
+[tool.ruff.format]
+docstring-code-format = false
+quote-style = "double"
+
+[tool.pyright]
+pythonVersion = "3.14"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUnnecessaryTypeIgnoreComment = true
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+executionEnvironments = [
+    { root = ".", extraPaths = ["src"] },
+    { root = "tests", extraPaths = ["src"], reportPrivateImportUsage = false },
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+patch = ["subprocess"]
+concurrency = ["multiprocessing", "thread"]
+branch = true
+data_file = ".coverage/.coverage"
+source = ["src/just_py_bash"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "if __name__ == .__main__.:",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.2,<0.12.0"]
