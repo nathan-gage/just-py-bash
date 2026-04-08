@@ -7,7 +7,9 @@ authors = [
     { name = "Nathan Gage", email = "nathan@sweetspot.so" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "pydantic>=2.10",
+]
 
 [project.scripts]
 just-py-bash = "just_py_bash:main"
@@ -15,6 +17,7 @@ just-py-bash = "just_py_bash:main"
 [dependency-groups]
 dev = [
     "coverage[toml]>=7.10.7",
+    "hypothesis>=6.142.4",
     "pytest>=9.0.0",
     "pytest-xdist>=3.6.1",
 ]
