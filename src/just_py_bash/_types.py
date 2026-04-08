@@ -86,6 +86,7 @@ class InitOptionsWire(TypedDict, total=False):
     python: bool
     javascript: bool | JavaScriptConfigWire
     commands: Sequence[str]
+    customCommandNames: Sequence[str]
     network: NetworkConfig
     processInfo: ProcessInfo
 
@@ -111,6 +112,23 @@ class ExecRequestPayload(TypedDict):
     options: ExecOptionsWire
 
 
+class CustomCommandExecRequestPayload(TypedDict):
+    invocationId: int
+    script: str
+    options: ExecOptionsWire
+
+
+class CustomCommandErrorPayload(TypedDict, total=False):
+    type: str
+    message: str
+
+
+class CustomCommandCompleteRequestPayload(TypedDict, total=False):
+    invocationId: int
+    result: ExecResultWire
+    error: CustomCommandErrorPayload
+
+
 class PathRequestPayload(TypedDict):
     path: str
 
@@ -133,6 +151,20 @@ class InfoResponse(TypedDict):
     backendVersion: str | None
     cwd: str
     env: Mapping[str, str]
+
+
+class CustomCommandContextPayload(TypedDict):
+    cwd: str
+    env: dict[str, str]
+    stdin: str
+
+
+class CustomCommandEvent(TypedDict):
+    type: Literal["custom_command"]
+    invocationId: int
+    name: str
+    args: list[str]
+    context: CustomCommandContextPayload
 
 
 class ExecResultWire(TypedDict, total=False):

@@ -8,12 +8,31 @@ const BYTE_TAG = '__just_py_bash_bytes__';
 let BashClass = null;
 let bash = null;
 let backendVersion = null;
+let nextInvocationId = 1;
+const pendingCustomCommands = new Map();
 
 function respond(id, ok, payload) {
   const body = ok
     ? { id, ok: true, result: payload }
     : { id, ok: false, error: payload };
   process.stdout.write(`${JSON.stringify(body)}\n`);
+}
+
+function emitCustomCommandInvocation(name, args, ctx) {
+  process.stdout.write(
+    `${JSON.stringify({
+      type: 'custom_command',
+      invocationId: nextInvocationId,
+      name,
+      args,
+      context: {
+        cwd: ctx.cwd,
+        env: Object.fromEntries(ctx.env),
+        stdin: ctx.stdin,
+      },
+    })}\n`,
+  );
+  return nextInvocationId++;
 }
 
 function errorPayload(error) {
@@ -63,6 +82,19 @@ function decodeFiles(files) {
   return decoded;
 }
 
+function createPythonCustomCommand(name) {
+  return {
+    name,
+    trusted: true,
+    async execute(args, ctx) {
+      const invocationId = emitCustomCommandInvocation(name, args, ctx);
+      return await new Promise((resolve) => {
+        pendingCustomCommands.set(invocationId, { ctx, resolve });
+      });
+    },
+  };
+}
+
 function decodeInitOptions(options) {
   const decoded = {};
 
@@ -77,6 +109,13 @@ function decodeInitOptions(options) {
   }
   if (options.network !== undefined) decoded.network = options.network;
   if (options.processInfo !== undefined) decoded.processInfo = options.processInfo;
+
+  const customCommandNames = Array.isArray(options.customCommandNames)
+    ? options.customCommandNames.filter((name) => typeof name === 'string')
+    : [];
+  if (customCommandNames.length > 0) {
+    decoded.customCommands = customCommandNames.map(createPythonCustomCommand);
+  }
 
   return decoded;
 }
@@ -101,26 +140,66 @@ function ensureInitialized() {
   }
 }
 
-async function execWithTimeout(script, options) {
+async function runExec(executor, script, options) {
   const timeoutMs = options?.timeoutMs;
   const execOptions = { ...options };
   delete execOptions.timeoutMs;
 
   if (timeoutMs === undefined) {
-    return bash.exec(script, execOptions);
+    return await executor(script, execOptions);
   }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await bash.exec(script, {
+    return await executor(script, {
       ...execOptions,
       signal: controller.signal,
     });
   } finally {
     clearTimeout(timer);
   }
+}
+
+function normalizeCommandResult(result) {
+  return {
+    stdout: typeof result?.stdout === 'string' ? result.stdout : '',
+    stderr: typeof result?.stderr === 'string' ? result.stderr : '',
+    exitCode: Number.isInteger(result?.exitCode) ? result.exitCode : 0,
+  };
+}
+
+async function handleCustomCommandExec(message) {
+  const pending = pendingCustomCommands.get(message.invocationId);
+  if (!pending) {
+    throw new Error(`Unknown custom command invocation: ${message.invocationId}`);
+  }
+  if (typeof pending.ctx.exec !== 'function') {
+    throw new Error('Custom command context does not support nested exec');
+  }
+
+  const execOptions = decodeExecOptions(message.options ?? {});
+  if (execOptions.cwd === undefined) {
+    execOptions.cwd = pending.ctx.cwd;
+  }
+
+  return await runExec(
+    pending.ctx.exec.bind(pending.ctx),
+    message.script,
+    execOptions,
+  );
+}
+
+function handleCustomCommandComplete(message) {
+  const pending = pendingCustomCommands.get(message.invocationId);
+  if (!pending) {
+    throw new Error(`Unknown custom command invocation: ${message.invocationId}`);
+  }
+
+  pendingCustomCommands.delete(message.invocationId);
+  pending.resolve(normalizeCommandResult(message.result));
+  return null;
 }
 
 async function handleMessage(message) {
@@ -152,10 +231,21 @@ async function handleMessage(message) {
 
     case 'exec': {
       ensureInitialized();
-      return await execWithTimeout(
+      return await runExec(
+        bash.exec.bind(bash),
         message.script,
         decodeExecOptions(message.options ?? {}),
       );
+    }
+
+    case 'custom_command_exec': {
+      ensureInitialized();
+      return await handleCustomCommandExec(message);
+    }
+
+    case 'custom_command_complete': {
+      ensureInitialized();
+      return handleCustomCommandComplete(message);
     }
 
     case 'read_text': {

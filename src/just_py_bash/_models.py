@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Final, TypeAlias
 
-from pydantic import ConfigDict, Field, StrictInt, StrictStr, TypeAdapter
+from pydantic import ConfigDict, Field, StrictInt, StrictStr, TypeAdapter, ValidationError
 from pydantic.alias_generators import to_camel
 from pydantic.dataclasses import dataclass
 
@@ -72,7 +72,13 @@ class ExecResult:
 
     @classmethod
     def from_wire(cls, payload: Mapping[str, object]) -> ExecResult:
-        return _EXEC_RESULT_ADAPTER.validate_python(dict(payload))
+        return cls(
+            stdout=_string_field(payload, "stdout"),
+            stderr=_string_field(payload, "stderr"),
+            exit_code=_int_field(payload, "exitCode", fallback_key="exit_code"),
+            env=_env_field(payload.get("env")),
+            metadata=_metadata_field(payload.get("metadata")),
+        )
 
     @property
     def ok(self) -> bool:
@@ -91,6 +97,40 @@ class ExecResult:
         return self.check()
 
 
+def _string_field(payload: Mapping[str, object], key: str) -> str:
+    value = payload.get(key, "")
+    return value if isinstance(value, str) else str(value)
+
+
+def _int_field(payload: Mapping[str, object], key: str, *, fallback_key: str | None = None) -> int:
+    value = payload.get(key)
+    if value is None and fallback_key is not None:
+        value = payload.get(fallback_key)
+    return int(value) if isinstance(value, (int, str)) else 0
+
+
+def _env_field(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping):
+        return {}
+
+    try:
+        return _ENV_ADAPTER.validate_python(value)
+    except ValidationError:
+        return {}
+
+
+def _metadata_field(value: object) -> dict[str, object] | None:
+    if not isinstance(value, Mapping):
+        return None
+
+    try:
+        return _METADATA_ADAPTER.validate_python(value)
+    except ValidationError:
+        return None
+
+
+_ENV_ADAPTER: Final = TypeAdapter(dict[str, str])
+_METADATA_ADAPTER: Final = TypeAdapter(dict[str, object])
 _EXECUTION_LIMITS_ADAPTER: Final = TypeAdapter(ExecutionLimits)
 _EXECUTION_LIMITS_WIRE_ADAPTER: Final = TypeAdapter(ExecutionLimitsWire)
 _JAVASCRIPT_CONFIG_ADAPTER: Final = TypeAdapter(JavaScriptConfig)

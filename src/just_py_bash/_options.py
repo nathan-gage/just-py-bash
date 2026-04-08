@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ._codec import encode_file_value
 from ._models import ExecutionLimits, JavaScriptConfig
 from ._types import ExecOptionsWire, FileValue, InitOptionsWire, NetworkConfig, ProcessInfo
+
+if TYPE_CHECKING:
+    from ._custom_commands import CustomCommands
 
 
 @dataclass(slots=True, kw_only=True)
@@ -17,6 +21,7 @@ class BashOptions:
     python: bool = False
     javascript: bool | JavaScriptConfig = False
     commands: Sequence[str] | None = None
+    custom_commands: CustomCommands | None = None
     network: NetworkConfig | None = None
     process_info: ProcessInfo | None = None
 
@@ -39,6 +44,8 @@ class BashOptions:
             )
         if self.commands is not None:
             init_options["commands"] = list(self.commands)
+        if self.custom_commands is not None:
+            init_options["customCommandNames"] = list(self.custom_commands)
         if self.network is not None:
             init_options["network"] = self.network
         if self.process_info is not None:

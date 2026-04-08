@@ -19,10 +19,14 @@ from typing import Final, Literal, TypeAlias, overload
 
 from pydantic import TypeAdapter, ValidationError
 
+from ._custom_commands import CustomCommandContext, CustomCommands, command_error_result, invoke_custom_command
 from ._exceptions import BackendError, BackendUnavailableError, BridgeError, BridgeTimeoutError
 from ._types import (
     BackendErrorPayload,
     BytesPayload,
+    CustomCommandCompleteRequestPayload,
+    CustomCommandEvent,
+    CustomCommandExecRequestPayload,
     ExecRequestPayload,
     ExecResultWire,
     InfoResponse,
@@ -38,6 +42,8 @@ from ._worker_source import WORKER_SOURCE
 
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 BridgeOperation: TypeAlias = Literal[
+    "custom_command_complete",
+    "custom_command_exec",
     "exec",
     "get_cwd",
     "get_env",
@@ -48,8 +54,10 @@ BridgeOperation: TypeAlias = Literal[
     "write_bytes",
     "write_text",
 ]
+_JSON_OBJECT_ADAPTER: Final[TypeAdapter[dict[str, object]]] = TypeAdapter(dict[str, object])
 _WORKER_RESPONSE_ADAPTER: Final[TypeAdapter[WorkerResponse]] = TypeAdapter(WorkerResponse)
 _BACKEND_ERROR_ADAPTER: Final[TypeAdapter[BackendErrorPayload]] = TypeAdapter(BackendErrorPayload)
+_CUSTOM_COMMAND_EVENT_ADAPTER: Final[TypeAdapter[CustomCommandEvent]] = TypeAdapter(CustomCommandEvent)
 
 
 @dataclass(slots=True, frozen=True)
@@ -62,11 +70,27 @@ _worker_path_lock = threading.Lock()
 _worker_path_cache: Path | None = None
 
 
-def _parse_worker_response(line: str) -> WorkerResponse:
+def _parse_worker_message(line: str) -> dict[str, object]:
     try:
-        return _WORKER_RESPONSE_ADAPTER.validate_json(line)
+        return _JSON_OBJECT_ADAPTER.validate_json(line)
     except ValidationError as exc:  # pragma: no cover - defensive bridge failure
         raise BridgeError(f"Failed to decode just-bash worker response: {exc}: {line!r}") from exc
+
+
+def _parse_worker_response(payload: Mapping[str, object]) -> WorkerResponse:
+    try:
+        return _WORKER_RESPONSE_ADAPTER.validate_python(dict(payload))
+    except ValidationError as exc:  # pragma: no cover - defensive bridge failure
+        raise BridgeError(f"Received an invalid response from the just-bash worker: {exc}: {payload!r}") from exc
+
+
+def _parse_custom_command_event(payload: Mapping[str, object]) -> CustomCommandEvent:
+    try:
+        return _CUSTOM_COMMAND_EVENT_ADAPTER.validate_python(dict(payload))
+    except ValidationError as exc:  # pragma: no cover - defensive bridge failure
+        raise BridgeError(
+            f"Received an invalid custom command event from the just-bash worker: {exc}: {payload!r}"
+        ) from exc
 
 
 def _parse_backend_error(raw_error: object) -> BackendErrorPayload:
@@ -89,7 +113,8 @@ def write_worker_file() -> Path:
         worker_dir = Path(tempfile.gettempdir()) / "just-py-bash"
         worker_dir.mkdir(parents=True, exist_ok=True)
         worker_path = worker_dir / f"worker-{digest}.mjs"
-        if not worker_path.exists() or worker_path.read_text(encoding="utf-8") != WORKER_SOURCE:
+        # Filename embeds the content digest, so existence implies correctness.
+        if not worker_path.exists():
             worker_path.write_text(WORKER_SOURCE, encoding="utf-8")
         _worker_path_cache = worker_path
         return worker_path
@@ -175,6 +200,7 @@ class NodeBridge:
         self,
         *,
         init_options: InitOptionsWire,
+        custom_commands: CustomCommands | None = None,
         node_command: Sequence[str] | None = None,
         js_entry: str | os.PathLike[str] | None = None,
         package_json: str | os.PathLike[str] | None = None,
@@ -185,12 +211,13 @@ class NodeBridge:
         )
         self.backend_version: str | None = None
         self._stderr_tail: deque[str] = deque(maxlen=50)
-        self._call_lock = threading.Lock()
         self._pending_lock = threading.Lock()
+        self._send_lock = threading.Lock()
         self._close_lock = threading.Lock()
         self._closed = False
         self._next_id = count(1)
         self._pending: dict[int, Queue[WorkerResponse | BaseException]] = {}
+        self._custom_commands = dict(custom_commands or {})
 
         command = [*resolve_node_command(node_command), str(write_worker_file())]
 
@@ -249,7 +276,7 @@ class NodeBridge:
                 pass
 
     @staticmethod
-    def _finalize_process(proc: subprocess.Popen[str]) -> None:
+    def _finalize_process(proc: subprocess.Popen[str], wait_timeout: float = 1.0) -> None:
         if proc.poll() is None:
             try:
                 proc.terminate()
@@ -257,12 +284,17 @@ class NodeBridge:
                 NodeBridge._close_process_pipes(proc)
                 return
             try:
-                proc.wait(timeout=1.0)
+                proc.wait(timeout=wait_timeout)
             except subprocess.TimeoutExpired:
                 try:
                     proc.kill()
                 except OSError:
                     pass
+                else:
+                    try:
+                        proc.wait(timeout=wait_timeout)
+                    except subprocess.TimeoutExpired:
+                        pass
         NodeBridge._close_process_pipes(proc)
 
     def close(self) -> None:
@@ -272,25 +304,7 @@ class NodeBridge:
             self._closed = True
 
             self._fail_all_pending(BridgeError("just-bash bridge closed"))
-
-            if self._proc.poll() is None:
-                try:
-                    self._proc.terminate()
-                except OSError:
-                    pass
-                try:
-                    self._proc.wait(timeout=2.0)
-                except subprocess.TimeoutExpired:
-                    try:
-                        self._proc.kill()
-                    except OSError:
-                        pass
-                    try:
-                        self._proc.wait(timeout=2.0)
-                    except subprocess.TimeoutExpired:
-                        pass
-
-            self._close_process_pipes(self._proc)
+            self._finalize_process(self._proc, wait_timeout=2.0)
             self._stdout_thread.join(timeout=0.2)
             self._stderr_thread.join(timeout=0.2)
             self._finalizer.detach()
@@ -321,6 +335,24 @@ class NodeBridge:
         *,
         timeout: float | None = None,
     ) -> ExecResultWire: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["custom_command_exec"],
+        payload: CustomCommandExecRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> ExecResultWire: ...
+
+    @overload
+    def request(
+        self,
+        op: Literal["custom_command_complete"],
+        payload: CustomCommandCompleteRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
 
     @overload
     def request(
@@ -383,10 +415,12 @@ class NodeBridge:
         *,
         timeout: float | None = None,
     ) -> object:
-        with self._call_lock:
+        self._ensure_open()
+
+        response_queue: Queue[WorkerResponse | BaseException] = Queue(maxsize=1)
+        with self._send_lock:
             self._ensure_open()
             request_id = next(self._next_id)
-            response_queue: Queue[WorkerResponse | BaseException] = Queue(maxsize=1)
             with self._pending_lock:
                 self._pending[request_id] = response_queue
 
@@ -395,47 +429,44 @@ class NodeBridge:
                 request_message.update(payload)
 
             try:
-                self._send(request_message)
+                self._write_message(request_message)
             except Exception:
                 with self._pending_lock:
                     self._pending.pop(request_id, None)
                 raise
 
-            wait_timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT_SECONDS
-            try:
-                response = response_queue.get(timeout=wait_timeout)
-            except Empty as exc:
-                with self._pending_lock:
-                    self._pending.pop(request_id, None)
-                self.close()
-                raise BridgeTimeoutError(f"Timed out waiting for just-bash worker response to {op!r}.") from exc
+        wait_timeout = timeout if timeout is not None else _DEFAULT_TIMEOUT_SECONDS
+        try:
+            response = response_queue.get(timeout=wait_timeout)
+        except Empty as exc:
+            with self._pending_lock:
+                self._pending.pop(request_id, None)
+            self.close()
+            raise BridgeTimeoutError(f"Timed out waiting for just-bash worker response to {op!r}.") from exc
 
-            if isinstance(response, BaseException):
-                raise response
+        if isinstance(response, BaseException):
+            raise response
 
-            match response:
-                case {"ok": True, "result": result}:
-                    return result
-                case {"ok": False, "error": raw_error}:
-                    error_details = _parse_backend_error(raw_error)
-                    detail_message = error_details.get("message")
-                    error_message = (
-                        detail_message if isinstance(detail_message, str) else f"Backend operation {op!r} failed"
-                    )
-                    error_type_value = error_details.get("type")
-                    error_type = error_type_value if isinstance(error_type_value, str) else None
-                    raise BackendError(error_message, error_type=error_type, details=error_details)
-                case _:
-                    raise BridgeError("Received an invalid response from the just-bash worker")
+        match response:
+            case {"ok": True, "result": result}:
+                return result
+            case {"ok": False, "error": raw_error}:
+                error_details = _parse_backend_error(raw_error)
+                error_message = error_details.get("message") or f"Backend operation {op!r} failed"
+                raise BackendError(
+                    error_message,
+                    error_type=error_details.get("type"),
+                    details=error_details,
+                )
+            case _:
+                raise BridgeError("Received an invalid response from the just-bash worker")
 
-    def _send(self, message: Mapping[str, object]) -> None:
+    def _write_message(self, message: Mapping[str, object]) -> None:
         stdin = self._proc.stdin
         if stdin is None:
             raise BridgeError("just-bash worker stdin is unavailable")
         try:
-            stdin.write(json.dumps(message, separators=(",", ":")))
-            stdin.write("\n")
-            stdin.flush()
+            print(json.dumps(message, separators=(",", ":")), file=stdin, flush=True)
         except OSError as exc:
             self.close()
             raise BridgeError(self._process_failure_message()) from exc
@@ -448,7 +479,12 @@ class NodeBridge:
 
         for line in stdout:
             try:
-                response = _parse_worker_response(line)
+                message = _parse_worker_message(line)
+                if message.get("type") == "custom_command":
+                    event = _parse_custom_command_event(message)
+                    self._dispatch_custom_command(event)
+                    continue
+                response = _parse_worker_response(message)
             except BridgeError as exc:
                 self._fail_all_pending(exc)
                 return
@@ -460,6 +496,46 @@ class NodeBridge:
 
         if not self._closed:
             self._fail_all_pending(BridgeError(self._process_failure_message()))
+
+    def _dispatch_custom_command(self, event: CustomCommandEvent) -> None:
+        thread = threading.Thread(
+            target=self._handle_custom_command,
+            args=(event,),
+            name=f"just-py-bash-command-{event['name']}",
+            daemon=True,
+        )
+        thread.start()
+
+    def _handle_custom_command(self, event: CustomCommandEvent) -> None:
+        callback = self._custom_commands.get(event["name"])
+        if callback is None:
+            result = command_error_result(NotImplementedError(f"Unknown custom command: {event['name']}"))
+        else:
+            try:
+                context_payload = event["context"]
+                context = CustomCommandContext(
+                    _bridge=self,
+                    _invocation_id=event["invocationId"],
+                    cwd=context_payload["cwd"],
+                    env=dict(context_payload["env"]),
+                    stdin=context_payload["stdin"],
+                )
+                result = invoke_custom_command(callback, list(event["args"]), context)
+            except Exception as exc:  # pragma: no cover - exercised via contract tests
+                result = command_error_result(exc)
+
+        try:
+            completion_payload: CustomCommandCompleteRequestPayload = {
+                "invocationId": event["invocationId"],
+                "result": result.to_wire(),
+            }
+            self.request(
+                "custom_command_complete",
+                completion_payload,
+                timeout=_DEFAULT_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            self.close()
 
     def _read_stderr(self) -> None:
         stderr = self._proc.stderr

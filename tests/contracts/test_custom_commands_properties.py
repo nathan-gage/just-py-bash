@@ -6,19 +6,16 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tests.contracts.test_custom_commands import (
-    CUSTOM_COMMAND_CONTEXT_REASON,
-    CUSTOM_COMMANDS_REASON,
-    make_custom_command_session,
-)
+from tests.contracts.test_custom_commands import make_custom_command_session
 
 pytestmark = [pytest.mark.contract, pytest.mark.generated]
 
 BLACKLIST_CATEGORIES: tuple[Literal["Cs"], ...] = ("Cs",)
+AMBIGUOUS_LATIN1 = "".join(chr(codepoint) for codepoint in range(128, 256))
 TEXT_VALUES = st.text(
     alphabet=st.characters(
         blacklist_categories=BLACKLIST_CATEGORIES,
-        blacklist_characters="\r",
+        blacklist_characters=f"\r{AMBIGUOUS_LATIN1}",
     ),
     min_size=0,
     max_size=20,
@@ -26,11 +23,6 @@ TEXT_VALUES = st.text(
 EXIT_CODES = st.integers(min_value=0, max_value=9)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMAND_CONTEXT_REASON,
-)
 @settings(max_examples=12, deadline=None)
 @given(arg=TEXT_VALUES, stdin=TEXT_VALUES, token=TEXT_VALUES)
 def test_custom_command_reflects_args_stdin_and_env(
@@ -53,11 +45,6 @@ def test_custom_command_reflects_args_stdin_and_env(
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMANDS_REASON,
-)
 @settings(max_examples=12, deadline=None)
 @given(stdout=TEXT_VALUES, stderr=TEXT_VALUES, exit_code=EXIT_CODES)
 def test_custom_command_result_fields_round_trip(

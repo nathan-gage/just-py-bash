@@ -6,6 +6,7 @@ from typing import Self
 
 from ._bridge import NodeBridge
 from ._codec import decode_bytes_payload, encode_file_value
+from ._custom_commands import CustomCommands
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._options import BashOptions, ExecOptions
 from ._types import FileValue, NetworkConfig, ProcessInfo
@@ -32,6 +33,7 @@ class Bash:
         python: bool = False,
         javascript: bool | JavaScriptConfig = False,
         commands: Sequence[str] | None = None,
+        custom_commands: CustomCommands | None = None,
         network: NetworkConfig | None = None,
         process_info: ProcessInfo | None = None,
         node_command: Sequence[str] | None = None,
@@ -47,6 +49,7 @@ class Bash:
                 python=python,
                 javascript=javascript,
                 commands=commands,
+                custom_commands=custom_commands,
                 network=network,
                 process_info=process_info,
             ),
@@ -83,11 +86,15 @@ class Bash:
     ) -> None:
         self._bridge = NodeBridge(
             init_options=options.to_wire(),
+            custom_commands=options.custom_commands,
             node_command=node_command,
             js_entry=js_entry,
             package_json=package_json,
         )
-        self.backend_version = self._bridge.backend_version
+
+    @property
+    def backend_version(self) -> str | None:
+        return self._bridge.backend_version
 
     def __enter__(self) -> Self:
         return self

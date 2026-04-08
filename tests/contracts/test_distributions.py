@@ -12,7 +12,6 @@ import pytest
 
 from tests.support.harness import ROOT
 
-PACKAGED_RUNTIME_REASON = "Self-contained distribution packaging is not implemented yet"
 pytestmark = [
     pytest.mark.contract,
     pytest.mark.packaging,
@@ -122,13 +121,8 @@ def assert_packaged_runtime_available(completed: subprocess.CompletedProcess[str
         return
 
     combined = f"{completed.stdout}\n{completed.stderr}"
-    if "BackendUnavailableError" in combined or "Could not find a built just-bash backend" in combined:
-        raise NotImplementedError(
-            "Installed artifacts are not self-contained yet; they still need a checkout-backed JS runtime.",
-        )
-
     raise AssertionError(
-        f"{label} failed unexpectedly\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
+        f"{label} failed unexpectedly\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}\ncombined:\n{combined}",
     )
 
 
@@ -146,7 +140,6 @@ def installed_sdist(tmp_path_factory: pytest.TempPathFactory) -> InstalledDistri
     return install_distribution(sdist, root)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
 def test_installed_wheel_boots_without_repo_checkout(installed_wheel: InstalledDistribution) -> None:
     completed = run_installed_python(
         installed_wheel,
@@ -166,7 +159,6 @@ def test_installed_wheel_boots_without_repo_checkout(installed_wheel: InstalledD
     assert lines[-1] == "wheel-runtime"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
 def test_installed_wheel_console_script_runs_without_repo_checkout(
     installed_wheel: InstalledDistribution,
 ) -> None:
@@ -177,7 +169,6 @@ def test_installed_wheel_console_script_runs_without_repo_checkout(
     assert completed.stderr == ""
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
 def test_installed_wheel_supports_stateful_api_session(installed_wheel: InstalledDistribution) -> None:
     completed = run_installed_python(
         installed_wheel,
@@ -201,7 +192,6 @@ def test_installed_wheel_supports_stateful_api_session(installed_wheel: Installe
     assert payload["cwd"] == "/workspace"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
 def test_installed_sdist_boots_without_repo_checkout(installed_sdist: InstalledDistribution) -> None:
     completed = run_installed_python(
         installed_sdist,
@@ -221,7 +211,6 @@ def test_installed_sdist_boots_without_repo_checkout(installed_sdist: InstalledD
     assert lines[-1] == "sdist-runtime"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
 def test_installed_sdist_console_script_runs_without_repo_checkout(
     installed_sdist: InstalledDistribution,
 ) -> None:

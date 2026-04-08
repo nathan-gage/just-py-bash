@@ -10,11 +10,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+
+from pydantic import TypeAdapter, ValidationError
 
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCE_SCRIPT = Path(__file__).resolve().with_name("reference.mjs")
 BYTE_TAG = "__just_py_bash_bytes__"
+_JSON_OBJECT_ADAPTER = TypeAdapter(dict[str, object])
 
 
 @dataclass(slots=True, frozen=True)
@@ -248,10 +251,11 @@ def run_reference_scenario(
             f"reference harness failed\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
         )
 
-    payload = json.loads(completed.stdout)
-    if not isinstance(payload, dict):
-        raise AssertionError(f"reference harness returned a non-object payload: {payload!r}")
-    return cast(dict[str, Any], payload)
+    try:
+        payload = _JSON_OBJECT_ADAPTER.validate_json(completed.stdout)
+    except ValidationError as exc:
+        raise AssertionError(f"reference harness returned an invalid payload: {exc}\n{completed.stdout}") from exc
+    return payload
 
 
 def op_exec(script: str, **kwargs: Any) -> dict[str, Any]:

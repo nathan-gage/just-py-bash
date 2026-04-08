@@ -5,6 +5,7 @@ import sys
 from importlib.metadata import PackageNotFoundError, version
 
 from ._api import Bash
+from ._custom_commands import CustomCommandCallback, CustomCommandContext, CustomCommands
 from ._exceptions import (
     BackendError,
     BackendUnavailableError,
@@ -29,6 +30,9 @@ __all__ = [
     "BackendError",
     "BackendUnavailableError",
     "BashOptions",
+    "CustomCommandCallback",
+    "CustomCommandContext",
+    "CustomCommands",
     "BridgeError",
     "BridgeTimeoutError",
     "CommandFailedError",

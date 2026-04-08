@@ -9,9 +9,6 @@ from tests.support.harness import public_api
 
 pytestmark = pytest.mark.contract
 
-CUSTOM_COMMANDS_REASON = "Python-defined custom commands are not implemented yet"
-CUSTOM_COMMAND_CONTEXT_REASON = "Python custom command context bridging is not implemented yet"
-
 
 def make_custom_command_session(**kwargs: Any) -> Any:
     Bash = public_api().Bash
@@ -26,11 +23,6 @@ def make_custom_command_session(**kwargs: Any) -> Any:
     return Bash(**kwargs)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMANDS_REASON,
-)
 def test_custom_command_round_trips_through_shell() -> None:
     def hello(args: list[str], ctx: Any) -> dict[str, Any]:
         name = args[0] if args else "world"
@@ -49,11 +41,6 @@ def test_custom_command_round_trips_through_shell() -> None:
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMAND_CONTEXT_REASON,
-)
 def test_custom_command_receives_context_and_can_nested_exec() -> None:
     def inspect_ctx(args: list[str], ctx: Any) -> dict[str, Any]:
         del args
@@ -75,11 +62,6 @@ def test_custom_command_receives_context_and_can_nested_exec() -> None:
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMANDS_REASON,
-)
 def test_custom_command_can_participate_in_pipelines() -> None:
     def upper(args: list[str], ctx: Any) -> dict[str, Any]:
         del args
@@ -97,11 +79,6 @@ def test_custom_command_can_participate_in_pipelines() -> None:
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMANDS_REASON,
-)
 def test_custom_command_can_override_builtin_name() -> None:
     def echo(args: list[str], ctx: Any) -> dict[str, Any]:
         del ctx
@@ -118,11 +95,6 @@ def test_custom_command_can_override_builtin_name() -> None:
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMANDS_REASON,
-)
 def test_custom_command_nonzero_result_is_preserved() -> None:
     def deny(args: list[str], ctx: Any) -> dict[str, Any]:
         del args, ctx
@@ -140,11 +112,6 @@ def test_custom_command_nonzero_result_is_preserved() -> None:
     assert result.exit_code == 17
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMANDS_REASON,
-)
 def test_async_custom_command_is_supported() -> None:
     async def hello(args: list[str], ctx: Any) -> dict[str, Any]:
         del ctx
@@ -161,11 +128,6 @@ def test_async_custom_command_is_supported() -> None:
     assert result.exit_code == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=CUSTOM_COMMAND_CONTEXT_REASON,
-)
 def test_custom_command_exception_becomes_shell_failure() -> None:
     def explode(args: list[str], ctx: Any) -> dict[str, Any]:
         del args, ctx
