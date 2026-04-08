@@ -12,8 +12,8 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
-ROOT = Path(__file__).resolve().parents[1]
-REFERENCE_SCRIPT = ROOT / "tests" / "js" / "reference.mjs"
+ROOT = Path(__file__).resolve().parents[2]
+REFERENCE_SCRIPT = Path(__file__).resolve().with_name("reference.mjs")
 BYTE_TAG = "__just_py_bash_bytes__"
 
 
@@ -309,7 +309,7 @@ def run_differential_scenario(
     return python_result, reference_result
 
 
-def phase1_snapshot_operations(*, root: str = "/workspace") -> list[dict[str, Any]]:
+def session_snapshot_operations(*, root: str = "/workspace") -> list[dict[str, Any]]:
     return [
         {"op": "get_cwd"},
         {"op": "get_env"},
@@ -328,7 +328,7 @@ __all__ = [
     "load_public_api",
     "normalize_exec_result",
     "normalize_operation_error",
-    "phase1_snapshot_operations",
+    "session_snapshot_operations",
     "resolve_backend_artifacts",
     "resolve_node_command",
     "run_differential_scenario",

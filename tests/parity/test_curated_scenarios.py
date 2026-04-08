@@ -5,25 +5,25 @@ from typing import Any
 
 import pytest
 
-from tests.helpers import BackendArtifacts, load_public_api, run_differential_scenario
+from tests.support.harness import BackendArtifacts, load_public_api, run_differential_scenario
 
 ScenarioFactory = Callable[[], dict[str, Any]]
-Scenario = tuple[str, ScenarioFactory, list[dict[str, Any]]]
+CuratedScenario = tuple[str, ScenarioFactory, list[dict[str, Any]]]
 
 
-def init_shell_state_isolated_but_filesystem_persists() -> dict[str, Any]:
+def make_shell_state_isolated_but_filesystem_persists_session() -> dict[str, Any]:
     return {"cwd": "/workspace", "env": {"BASE": "root"}}
 
 
-def init_exec_options_and_timeout() -> dict[str, Any]:
+def make_exec_options_and_timeout_session() -> dict[str, Any]:
     return {"cwd": "/workspace"}
 
 
-def init_binary_round_trip() -> dict[str, Any]:
+def make_binary_round_trip_session() -> dict[str, Any]:
     return {}
 
 
-def init_initial_files_and_command_allowlist() -> dict[str, Any]:
+def make_initial_files_and_command_allowlist_session() -> dict[str, Any]:
     return {
         "files": {"/seed.txt": "seed\n"},
         "commands": ["cat", "echo"],
@@ -31,18 +31,18 @@ def init_initial_files_and_command_allowlist() -> dict[str, Any]:
     }
 
 
-def init_empty_values_are_transported_exactly() -> dict[str, Any]:
+def make_empty_values_are_transported_exactly_session() -> dict[str, Any]:
     return {"cwd": "/workspace", "env": {"BASE": "root"}}
 
 
-def init_unicode_and_raw_script_round_trip() -> dict[str, Any]:
+def make_unicode_and_raw_script_round_trip_session() -> dict[str, Any]:
     return {"cwd": "/workspace"}
 
 
-SCENARIOS: list[Scenario] = [
+CURATED_SCENARIOS: list[CuratedScenario] = [
     (
         "shell_state_isolated_but_filesystem_persists",
-        init_shell_state_isolated_but_filesystem_persists,
+        make_shell_state_isolated_but_filesystem_persists_session,
         [
             {
                 "op": "exec",
@@ -58,7 +58,7 @@ SCENARIOS: list[Scenario] = [
     ),
     (
         "exec_options_and_timeout",
-        init_exec_options_and_timeout,
+        make_exec_options_and_timeout_session,
         [
             {"op": "exec", "script": "mkdir -p /workspace/subdir"},
             {"op": "exec", "script": "cat", "kwargs": {"stdin": "from-stdin\n"}},
@@ -82,7 +82,7 @@ SCENARIOS: list[Scenario] = [
     ),
     (
         "binary_round_trip",
-        init_binary_round_trip,
+        make_binary_round_trip_session,
         [
             {
                 "op": "write_bytes",
@@ -96,7 +96,7 @@ SCENARIOS: list[Scenario] = [
     ),
     (
         "initial_files_and_command_allowlist",
-        init_initial_files_and_command_allowlist,
+        make_initial_files_and_command_allowlist_session,
         [
             {"op": "exec", "script": "cat /seed.txt"},
             {"op": "exec", "script": "pwd"},
@@ -104,7 +104,7 @@ SCENARIOS: list[Scenario] = [
     ),
     (
         "empty_values_are_transported_exactly",
-        init_empty_values_are_transported_exactly,
+        make_empty_values_are_transported_exactly_session,
         [
             {"op": "exec", "script": "cat", "kwargs": {"stdin": ""}},
             {
@@ -121,7 +121,7 @@ SCENARIOS: list[Scenario] = [
     ),
     (
         "unicode_and_raw_script_round_trip",
-        init_unicode_and_raw_script_round_trip,
+        make_unicode_and_raw_script_round_trip_session,
         [
             {
                 "op": "write_text",
@@ -143,8 +143,12 @@ SCENARIOS: list[Scenario] = [
 ]
 
 
-@pytest.mark.parametrize(("name", "init_factory", "operations"), SCENARIOS)
-def test_wrapper_matches_direct_just_bash(
+@pytest.mark.parametrize(
+    ("name", "init_factory", "operations"),
+    CURATED_SCENARIOS,
+    ids=[name for name, _, _ in CURATED_SCENARIOS],
+)
+def test_curated_session_scenarios_match_upstream(
     name: str,
     init_factory: ScenarioFactory,
     operations: list[dict[str, Any]],

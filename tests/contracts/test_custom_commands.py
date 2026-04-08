@@ -5,13 +5,13 @@ from typing import Any
 
 import pytest
 
-from tests.helpers import load_public_api
+from tests.support.harness import load_public_api
 
-PHASE2_REASON = "Phase 2 Python-defined custom commands are not implemented yet"
-PHASE2_CONTEXT_REASON = "Phase 2 Python command context bridging is not implemented yet"
+CUSTOM_COMMANDS_REASON = "Python-defined custom commands are not implemented yet"
+CUSTOM_COMMAND_CONTEXT_REASON = "Python custom command context bridging is not implemented yet"
 
 
-def make_phase2_bash(**kwargs: Any) -> Any:
+def make_custom_command_session(**kwargs: Any) -> Any:
     Bash = load_public_api().Bash
     try:
         parameters = inspect.signature(Bash).parameters
@@ -19,7 +19,7 @@ def make_phase2_bash(**kwargs: Any) -> Any:
         raise NotImplementedError("Could not introspect the public Bash constructor") from exc
 
     if "custom_commands" not in parameters:
-        raise NotImplementedError("Phase 2 custom_commands API is not implemented yet")
+        raise NotImplementedError("The custom_commands public API is not implemented yet")
 
     return Bash(**kwargs)
 
@@ -27,18 +27,19 @@ def make_phase2_bash(**kwargs: Any) -> Any:
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_REASON,
+    reason=CUSTOM_COMMANDS_REASON,
 )
-def test_phase2_custom_command_round_trips_through_shell() -> None:
+def test_custom_command_round_trips_through_shell() -> None:
     def hello(args: list[str], ctx: Any) -> dict[str, Any]:
         name = args[0] if args else "world"
+        del ctx
         return {
             "stdout": f"hello, {name}!\n",
             "stderr": "",
             "exit_code": 0,
         }
 
-    with make_phase2_bash(custom_commands={"hello": hello}) as bash:
+    with make_custom_command_session(custom_commands={"hello": hello}) as bash:
         result = bash.exec("hello alice")
 
     assert result.stdout == "hello, alice!\n"
@@ -49,10 +50,11 @@ def test_phase2_custom_command_round_trips_through_shell() -> None:
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_CONTEXT_REASON,
+    reason=CUSTOM_COMMAND_CONTEXT_REASON,
 )
-def test_phase2_custom_command_receives_context_and_can_nested_exec() -> None:
+def test_custom_command_receives_context_and_can_nested_exec() -> None:
     def inspect_ctx(args: list[str], ctx: Any) -> dict[str, Any]:
+        del args
         nested = ctx.exec("cat note.txt")
         return {
             "stdout": f"stdin={ctx.stdin!r}|cwd={ctx.cwd}|nested={nested.stdout}",
@@ -60,7 +62,7 @@ def test_phase2_custom_command_receives_context_and_can_nested_exec() -> None:
             "exit_code": 0,
         }
 
-    with make_phase2_bash(
+    with make_custom_command_session(
         cwd="/workspace",
         files={"/workspace/note.txt": "from-nested-exec\n"},
         custom_commands={"inspect-ctx": inspect_ctx},
@@ -74,9 +76,9 @@ def test_phase2_custom_command_receives_context_and_can_nested_exec() -> None:
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_REASON,
+    reason=CUSTOM_COMMANDS_REASON,
 )
-def test_phase2_custom_command_can_participate_in_pipelines() -> None:
+def test_custom_command_can_participate_in_pipelines() -> None:
     def upper(args: list[str], ctx: Any) -> dict[str, Any]:
         del args
         return {
@@ -85,7 +87,7 @@ def test_phase2_custom_command_can_participate_in_pipelines() -> None:
             "exit_code": 0,
         }
 
-    with make_phase2_bash(custom_commands={"py-upper": upper}) as bash:
+    with make_custom_command_session(custom_commands={"py-upper": upper}) as bash:
         result = bash.exec("printf 'abC' | py-upper")
 
     assert result.stdout == "ABC"
@@ -96,9 +98,9 @@ def test_phase2_custom_command_can_participate_in_pipelines() -> None:
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_REASON,
+    reason=CUSTOM_COMMANDS_REASON,
 )
-def test_phase2_custom_command_can_override_builtin_name() -> None:
+def test_custom_command_can_override_builtin_name() -> None:
     def echo(args: list[str], ctx: Any) -> dict[str, Any]:
         del ctx
         return {
@@ -107,7 +109,7 @@ def test_phase2_custom_command_can_override_builtin_name() -> None:
             "exit_code": 0,
         }
 
-    with make_phase2_bash(custom_commands={"echo": echo}) as bash:
+    with make_custom_command_session(custom_commands={"echo": echo}) as bash:
         result = bash.exec("echo one two")
 
     assert result.stdout == "python-echo:one two\n"
@@ -117,9 +119,9 @@ def test_phase2_custom_command_can_override_builtin_name() -> None:
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_REASON,
+    reason=CUSTOM_COMMANDS_REASON,
 )
-def test_phase2_custom_command_nonzero_result_is_preserved() -> None:
+def test_custom_command_nonzero_result_is_preserved() -> None:
     def deny(args: list[str], ctx: Any) -> dict[str, Any]:
         del args, ctx
         return {
@@ -128,7 +130,7 @@ def test_phase2_custom_command_nonzero_result_is_preserved() -> None:
             "exit_code": 17,
         }
 
-    with make_phase2_bash(custom_commands={"deny": deny}) as bash:
+    with make_custom_command_session(custom_commands={"deny": deny}) as bash:
         result = bash.exec("deny")
 
     assert result.stdout == ""
@@ -139,9 +141,9 @@ def test_phase2_custom_command_nonzero_result_is_preserved() -> None:
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_REASON,
+    reason=CUSTOM_COMMANDS_REASON,
 )
-def test_phase2_async_custom_command_is_supported() -> None:
+def test_async_custom_command_is_supported() -> None:
     async def hello(args: list[str], ctx: Any) -> dict[str, Any]:
         del ctx
         return {
@@ -150,7 +152,7 @@ def test_phase2_async_custom_command_is_supported() -> None:
             "exit_code": 0,
         }
 
-    with make_phase2_bash(custom_commands={"hello": hello}) as bash:
+    with make_custom_command_session(custom_commands={"hello": hello}) as bash:
         result = bash.exec("hello mars")
 
     assert result.stdout == "async:mars\n"
@@ -160,14 +162,14 @@ def test_phase2_async_custom_command_is_supported() -> None:
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_CONTEXT_REASON,
+    reason=CUSTOM_COMMAND_CONTEXT_REASON,
 )
-def test_phase2_custom_command_exception_becomes_shell_failure() -> None:
+def test_custom_command_exception_becomes_shell_failure() -> None:
     def explode(args: list[str], ctx: Any) -> dict[str, Any]:
         del args, ctx
         raise RuntimeError("kaboom")
 
-    with make_phase2_bash(custom_commands={"explode": explode}) as bash:
+    with make_custom_command_session(custom_commands={"explode": explode}) as bash:
         result = bash.exec("explode")
 
     assert result.exit_code != 0

@@ -5,7 +5,7 @@ from typing import Any, Literal
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from tests.helpers import BackendArtifacts, phase1_snapshot_operations, run_differential_scenario
+from tests.support.harness import BackendArtifacts, run_differential_scenario, session_snapshot_operations
 
 FILE_NAMES = st.sampled_from(["alpha.txt", "beta.txt", "blob.bin"])
 BLACKLIST_CATEGORIES: tuple[Literal["Cs"], ...] = ("Cs",)
@@ -143,14 +143,14 @@ def operation_strategy(draw: st.DrawFn) -> dict[str, Any]:
     init_kwargs=initial_state_strategy(),
     operations=st.lists(operation_strategy(), min_size=1, max_size=8),
 )
-def test_phase1_property_differential_parity(
+def test_generated_session_transcripts_match_upstream(
     init_kwargs: dict[str, Any],
     operations: list[dict[str, Any]],
     backend_artifacts: BackendArtifacts,
 ) -> None:
     python_result, reference_result = run_differential_scenario(
         init_kwargs=init_kwargs,
-        operations=[*operations, *phase1_snapshot_operations(root="/workspace")],
+        operations=[*operations, *session_snapshot_operations(root="/workspace")],
         backend_artifacts=backend_artifacts,
     )
 

@@ -6,7 +6,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from tests.test_phase2_custom_commands import PHASE2_CONTEXT_REASON, PHASE2_REASON, make_phase2_bash
+from tests.contracts.test_custom_commands import (
+    CUSTOM_COMMAND_CONTEXT_REASON,
+    CUSTOM_COMMANDS_REASON,
+    make_custom_command_session,
+)
 
 BLACKLIST_CATEGORIES: tuple[Literal["Cs"], ...] = ("Cs",)
 TEXT_VALUES = st.text(
@@ -23,11 +27,11 @@ EXIT_CODES = st.integers(min_value=0, max_value=9)
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_CONTEXT_REASON,
+    reason=CUSTOM_COMMAND_CONTEXT_REASON,
 )
 @settings(max_examples=12, deadline=None)
 @given(arg=TEXT_VALUES, stdin=TEXT_VALUES, token=TEXT_VALUES)
-def test_phase2_property_custom_command_reflects_args_stdin_and_env(
+def test_custom_command_reflects_args_stdin_and_env(
     arg: str,
     stdin: str,
     token: str,
@@ -39,7 +43,7 @@ def test_phase2_property_custom_command_reflects_args_stdin_and_env(
             "exit_code": 0,
         }
 
-    with make_phase2_bash(custom_commands={"reflect": reflect}) as bash:
+    with make_custom_command_session(custom_commands={"reflect": reflect}) as bash:
         result = bash.exec("reflect", args=[arg], stdin=stdin, env={"TOKEN": token})
 
     assert result.stdout == f"{arg}|{stdin}|{token}"
@@ -50,11 +54,11 @@ def test_phase2_property_custom_command_reflects_args_stdin_and_env(
 @pytest.mark.xfail(
     strict=True,
     raises=NotImplementedError,
-    reason=PHASE2_REASON,
+    reason=CUSTOM_COMMANDS_REASON,
 )
 @settings(max_examples=12, deadline=None)
 @given(stdout=TEXT_VALUES, stderr=TEXT_VALUES, exit_code=EXIT_CODES)
-def test_phase2_property_custom_command_result_fields_round_trip(
+def test_custom_command_result_fields_round_trip(
     stdout: str,
     stderr: str,
     exit_code: int,
@@ -67,7 +71,7 @@ def test_phase2_property_custom_command_result_fields_round_trip(
             "exit_code": exit_code,
         }
 
-    with make_phase2_bash(custom_commands={"emit": emit}) as bash:
+    with make_custom_command_session(custom_commands={"emit": emit}) as bash:
         result = bash.exec("emit")
 
     assert result.stdout == stdout

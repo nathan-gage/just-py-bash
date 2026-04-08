@@ -2,9 +2,26 @@
 
 This directory defines the **behavioral contract** for `just-py-bash`.
 
-The test suite is intentionally organized around one idea:
+The suite is organized around capabilities and responsibilities, not the order features happened to be implemented.
 
-> The Python package is correct when its **public behavior** matches upstream `just-bash` for every supported feature, and when future wrapper-only features have explicit tests waiting for them.
+## Guiding principle
+
+> The wrapper is correct when its public behavior matches upstream `just-bash` for supported features, and when planned capabilities already have explicit black-box contracts waiting for them.
+
+## Directory layout
+
+- `tests/api/`
+  - public Python API behavior that should remain stable across refactors
+- `tests/parity/`
+  - upstream differential tests; this is the main oracle for wrapper correctness
+- `tests/contracts/`
+  - future-facing capability contracts that are intentionally `xfail(strict=True)` until implemented
+- `tests/support/`
+  - black-box harness code and the direct Node reference runner
+- `tests/conftest.py`
+  - pytest fixtures only
+
+Choose locations based on **what the test proves**, not whether it was added early or late.
 
 ## Core philosophy
 
@@ -21,11 +38,9 @@ That means:
 
 If `src/` changes substantially, the tests should still be valid unless the public contract changes.
 
-### 2. Upstream `just-bash` is the semantic oracle for phase 1
+### 2. Upstream `just-bash` is the semantic oracle for current wrapper parity
 
-For phase 1, the wrapper exists to preserve upstream behavior across the Python ↔ Node boundary.
-
-So the strongest tests are **differential tests**:
+For the currently supported wrapper surface, the strongest tests are **differential tests**:
 
 1. run a scenario through the Python wrapper
 2. run the same scenario through a direct Node harness importing upstream `just-bash`
@@ -33,9 +48,9 @@ So the strongest tests are **differential tests**:
 
 Prefer this style whenever possible.
 
-### 3. We are testing interop, not reimplementing upstream's suite in Python
+### 3. We are testing interop, not reimplementing upstream in Python
 
-Do not hand-copy huge amounts of shell semantics into expected values when a direct upstream comparison is possible.
+Do not hand-copy large amounts of shell semantics into expected values when a direct upstream comparison is possible.
 
 The main failure modes we care about are wrapper/interop failures such as:
 
@@ -52,7 +67,7 @@ The main failure modes we care about are wrapper/interop failures such as:
 Allowed dependencies from tests:
 
 - `just_py_bash` public exports
-- test-only helpers in `tests/`
+- test-only helpers in `tests/support/`
 - standard library
 - pytest / hypothesis / subprocess tooling
 - the vendored upstream checkout only as an external reference runtime
@@ -64,60 +79,48 @@ Disallowed from tests:
 - `just_py_bash._models`
 - any private helper under `src/just_py_bash/_*`
 
-If a test needs functionality that only exists in a private helper, re-create the minimum test-only helper under `tests/` instead.
+If a test needs functionality that only exists in a private helper, re-create the minimum test-only helper under `tests/support/` instead.
 
-## Phases
+## Suite responsibilities
 
-## Phase 1: wrapper parity
+### `tests/api/`: public API contracts
 
-Phase 1 tests should proliferate aggressively.
+Use this area for direct black-box assertions about the supported Python API, for example:
 
-Required styles:
+- object lifecycle
+- helper methods
+- result semantics
+- session isolation between wrapper instances
 
-- **curated conformance tests** for known API features
-- **property-based differential tests** for many generated session transcripts
-- **bridge robustness tests** for lifecycle and failure behavior
-- **final-state snapshots** where useful, not just per-call results
+### `tests/parity/`: wrapper vs upstream parity
 
-When adding a phase 1 feature test, prefer this order:
+Use this area for:
+
+- curated upstream parity scenarios
+- generated/property-based session transcripts
+- final-state snapshot comparisons when useful
+
+When adding parity coverage, prefer this order:
 
 1. add a small curated scenario
 2. add it to the differential corpus if possible
 3. add a property-based/generalized form if feasible
 
-### Phase 1 target surface
+### `tests/contracts/`: future capability contracts
 
-Current examples include:
+Use this area for capabilities we plan to support but have not shipped yet.
 
-- constructor options we publicly support
-- `exec()` behavior and option translation
-- helper methods like `read_text`, `read_bytes`, `write_text`, `write_bytes`
-- session isolation / persistence semantics
-- encoding / binary transport
-- timeout semantics
+Current examples:
 
-## Phase 2: Python-defined command callbacks
+- Python-defined custom commands
+- packaged wheel/sdist behavior without a repo checkout
 
-Phase 2 is expected to add wrapper-specific functionality that upstream JS does not natively expose as a Python API.
+Rules:
 
-Tests for phase 2 should exist **before implementation** and should usually be written as:
-
-- explicit contract tests
-- `xfail(strict=True)` until the feature is public and working
-- black-box tests against the proposed public API
-
-Do not silently skip future tests. Prefer strict `xfail` with a clear reason.
-
-## Phase 3: packaging, vendoring, release confidence
-
-Phase 3 tests cover behavior that matters at publish time, especially:
-
-- self-contained wheel/sdist behavior
-- bundled runtime availability without a repo checkout
-- release-time parity guarantees
-- upgrade/vendoring confidence
-
-These should also exist early as strict `xfail` tests when not yet implemented.
+- write the black-box contract now
+- mark it `xfail(strict=True)` until implemented
+- prefer `NotImplementedError` as the temporary failure mode
+- do not silently skip these tests
 
 ## Property testing guidance
 
@@ -130,6 +133,7 @@ Best targets:
 - text vs bytes round trips
 - env/cwd/args/stdin combinations
 - stateful read/write/exec transcripts
+- future custom-command IO/context round trips
 
 When using Hypothesis:
 
@@ -146,7 +150,7 @@ A scenario should usually describe:
 
 - init kwargs
 - a list of operations
-- expected parity with direct upstream
+- expected parity with direct upstream or a direct public-API contract
 - optional final snapshot operations
 
 If you need new coverage, first ask:
@@ -154,21 +158,22 @@ If you need new coverage, first ask:
 - can this be expressed as another scenario?
 - can it be checked by comparing wrapper vs direct upstream?
 
-## Failure philosophy
+## Naming guidance
 
-When a not-yet-implemented future feature is being specified:
+Name files and tests after the behavior being asserted.
 
-- write the test now
-- mark it `xfail(strict=True)`
-- prefer surfacing `NotImplementedError` for the missing behavior
-- do not weaken the assertion just to keep the suite green
+Good:
 
-Once the feature exists, remove the `xfail` and keep the exact behavioral assertions if possible.
+- `tests/parity/test_curated_scenarios.py`
+- `tests/contracts/test_custom_commands.py`
+- `test_installed_wheel_console_script_runs_without_repo_checkout`
+
+Avoid names that only reflect implementation order, temporary project phases, or local refactor history.
 
 ## Practical maintenance rules
 
-- keep helpers in `tests/helpers.py` black-box and self-contained
-- keep the Node reference harness in `tests/js/reference.mjs` simple and explicit
+- keep helpers in `tests/support/` black-box and self-contained
+- keep the Node reference harness in `tests/support/reference.mjs` simple and explicit
 - avoid coupling tests to the exact current worker implementation
 - if a test breaks because of a refactor but the public contract did not change, fix the implementation or the black-box helper, not the contract
 - prefer a few high-value properties over many brittle unit tests of internals
@@ -177,7 +182,7 @@ Once the feature exists, remove the `xfail` and keep the exact behavioral assert
 
 For any non-trivial public feature, aim for:
 
-1. one curated contract test
-2. one differential/conformance test if upstream parity is relevant
+1. one direct public-API contract test
+2. one differential/parity test if upstream equivalence is relevant
 3. one property-based or multi-scenario expansion if the state space is broad
-4. one future-facing `xfail` if the next phase depends on it
+4. one future-facing contract test if the next capability layer depends on it

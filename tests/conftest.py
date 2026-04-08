@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from tests.helpers import BackendArtifacts
+    from tests.support.harness import BackendArtifacts
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -17,6 +17,6 @@ if str(SRC) not in sys.path:
 
 @pytest.fixture(scope="session")
 def backend_artifacts() -> BackendArtifacts:
-    from tests.helpers import resolve_backend_artifacts
+    from tests.support.harness import resolve_backend_artifacts
 
     return resolve_backend_artifacts()

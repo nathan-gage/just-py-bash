@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers import ROOT
+from tests.support.harness import ROOT
 
-PHASE3_REASON = "Phase 3 self-contained packaging is not implemented yet"
-pytestmark = pytest.mark.xdist_group(name="phase3")
+PACKAGED_RUNTIME_REASON = "Self-contained distribution packaging is not implemented yet"
+pytestmark = pytest.mark.xdist_group(name="distribution_contracts")
 
 
 @dataclass(slots=True, frozen=True)
@@ -39,7 +39,7 @@ def venv_bin_dir(venv_dir: Path) -> Path:
 def build_distribution(kind: str, dist_dir: Path) -> Path:
     uv = shutil.which("uv")
     if not uv:
-        raise NotImplementedError("uv is required to exercise the phase 3 packaging flow")
+        raise NotImplementedError("uv is required to exercise the packaging flow")
 
     command = [uv, "build", f"--{kind}", "--out-dir", str(dist_dir)]
     completed = subprocess.run(
@@ -61,7 +61,7 @@ def build_distribution(kind: str, dist_dir: Path) -> Path:
     return built[0]
 
 
-def scrub_phase3_env() -> dict[str, str]:
+def scrub_distribution_env() -> dict[str, str]:
     env = os.environ.copy()
     env.pop("JUST_PY_BASH_JS_ENTRY", None)
     env.pop("JUST_PY_BASH_PACKAGE_JSON", None)
@@ -81,7 +81,7 @@ def install_distribution(dist_path: Path, root: Path) -> InstalledDistribution:
     return InstalledDistribution(
         python=python,
         bin_dir=venv_bin_dir(venv_dir),
-        env=scrub_phase3_env(),
+        env=scrub_distribution_env(),
         root=isolated_root,
     )
 
@@ -130,26 +130,26 @@ def assert_packaged_runtime_available(completed: subprocess.CompletedProcess[str
 
 @pytest.fixture(scope="module")
 def installed_wheel(tmp_path_factory: pytest.TempPathFactory) -> InstalledDistribution:
-    root = tmp_path_factory.mktemp("phase3-wheel")
+    root = tmp_path_factory.mktemp("installed-wheel")
     wheel = build_distribution("wheel", root / "dist")
     return install_distribution(wheel, root)
 
 
 @pytest.fixture(scope="module")
 def installed_sdist(tmp_path_factory: pytest.TempPathFactory) -> InstalledDistribution:
-    root = tmp_path_factory.mktemp("phase3-sdist")
+    root = tmp_path_factory.mktemp("installed-sdist")
     sdist = build_distribution("sdist", root / "dist")
     return install_distribution(sdist, root)
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PHASE3_REASON)
-def test_phase3_installed_wheel_boots_without_repo_checkout(installed_wheel: InstalledDistribution) -> None:
+@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
+def test_installed_wheel_boots_without_repo_checkout(installed_wheel: InstalledDistribution) -> None:
     completed = run_installed_python(
         installed_wheel,
         (
             "from just_py_bash import Bash; "
             "bash = Bash(); "
-            "result = bash.exec('printf phase3'); "
+            "result = bash.exec('printf wheel-runtime'); "
             "print(bash.backend_version); "
             "print(result.stdout, end='')"
         ),
@@ -159,22 +159,22 @@ def test_phase3_installed_wheel_boots_without_repo_checkout(installed_wheel: Ins
     lines = [line for line in completed.stdout.splitlines() if line]
     assert len(lines) >= 2
     assert lines[0]
-    assert lines[-1] == "phase3"
+    assert lines[-1] == "wheel-runtime"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PHASE3_REASON)
-def test_phase3_installed_wheel_console_script_runs_without_repo_checkout(
+@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
+def test_installed_wheel_console_script_runs_without_repo_checkout(
     installed_wheel: InstalledDistribution,
 ) -> None:
-    completed = run_installed_console_script(installed_wheel, "just-py-bash", "printf cli-phase3")
+    completed = run_installed_console_script(installed_wheel, "just-py-bash", "printf wheel-cli")
     assert_packaged_runtime_available(completed, label="installed wheel CLI smoke test")
 
-    assert completed.stdout == "cli-phase3"
+    assert completed.stdout == "wheel-cli"
     assert completed.stderr == ""
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PHASE3_REASON)
-def test_phase3_installed_wheel_supports_stateful_api_session(installed_wheel: InstalledDistribution) -> None:
+@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
+def test_installed_wheel_supports_stateful_api_session(installed_wheel: InstalledDistribution) -> None:
     completed = run_installed_python(
         installed_wheel,
         (
@@ -197,14 +197,14 @@ def test_phase3_installed_wheel_supports_stateful_api_session(installed_wheel: I
     assert payload["cwd"] == "/workspace"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PHASE3_REASON)
-def test_phase3_installed_sdist_boots_without_repo_checkout(installed_sdist: InstalledDistribution) -> None:
+@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
+def test_installed_sdist_boots_without_repo_checkout(installed_sdist: InstalledDistribution) -> None:
     completed = run_installed_python(
         installed_sdist,
         (
             "from just_py_bash import Bash; "
             "bash = Bash(); "
-            "result = bash.exec('printf sdist-phase3'); "
+            "result = bash.exec('printf sdist-runtime'); "
             "print(bash.backend_version); "
             "print(result.stdout, end='')"
         ),
@@ -214,15 +214,15 @@ def test_phase3_installed_sdist_boots_without_repo_checkout(installed_sdist: Ins
     lines = [line for line in completed.stdout.splitlines() if line]
     assert len(lines) >= 2
     assert lines[0]
-    assert lines[-1] == "sdist-phase3"
+    assert lines[-1] == "sdist-runtime"
 
 
-@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PHASE3_REASON)
-def test_phase3_installed_sdist_console_script_runs_without_repo_checkout(
+@pytest.mark.xfail(strict=True, raises=NotImplementedError, reason=PACKAGED_RUNTIME_REASON)
+def test_installed_sdist_console_script_runs_without_repo_checkout(
     installed_sdist: InstalledDistribution,
 ) -> None:
-    completed = run_installed_console_script(installed_sdist, "just-py-bash", "printf sdist-cli-phase3")
+    completed = run_installed_console_script(installed_sdist, "just-py-bash", "printf sdist-cli")
     assert_packaged_runtime_available(completed, label="installed sdist CLI smoke test")
 
-    assert completed.stdout == "sdist-cli-phase3"
+    assert completed.stdout == "sdist-cli"
     assert completed.stderr == ""

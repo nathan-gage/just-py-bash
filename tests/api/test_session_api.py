@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tests.helpers import load_public_api
+from tests.support.harness import load_public_api
 
 
 def test_backend_version_is_exposed() -> None:
@@ -26,7 +26,7 @@ def test_exec_result_check_raises_for_non_zero_exit_codes() -> None:
         raise AssertionError("expected CommandFailedError")
 
 
-def test_sessions_are_isolated() -> None:
+def test_separate_sessions_do_not_share_filesystem_state() -> None:
     Bash = load_public_api().Bash
     with Bash() as left, Bash() as right:
         left.exec("echo left > only-here.txt")
