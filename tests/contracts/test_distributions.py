@@ -13,7 +13,11 @@ import pytest
 from tests.support.harness import ROOT
 
 PACKAGED_RUNTIME_REASON = "Self-contained distribution packaging is not implemented yet"
-pytestmark = pytest.mark.xdist_group(name="distribution_contracts")
+pytestmark = [
+    pytest.mark.contract,
+    pytest.mark.packaging,
+    pytest.mark.xdist_group(name="distribution_contracts"),
+]
 
 
 @dataclass(slots=True, frozen=True)

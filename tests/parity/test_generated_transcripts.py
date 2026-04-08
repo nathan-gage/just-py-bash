@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from tests.support.harness import BackendArtifacts, run_differential_scenario, session_snapshot_operations
+
+pytestmark = [pytest.mark.parity, pytest.mark.generated]
 
 FILE_NAMES = st.sampled_from(["alpha.txt", "beta.txt", "blob.bin"])
 BLACKLIST_CATEGORIES: tuple[Literal["Cs"], ...] = ("Cs",)
@@ -143,7 +146,7 @@ def operation_strategy(draw: st.DrawFn) -> dict[str, Any]:
     init_kwargs=initial_state_strategy(),
     operations=st.lists(operation_strategy(), min_size=1, max_size=8),
 )
-def test_generated_session_transcripts_match_upstream(
+def test_generated_transcripts_match_upstream(
     init_kwargs: dict[str, Any],
     operations: list[dict[str, Any]],
     backend_artifacts: BackendArtifacts,

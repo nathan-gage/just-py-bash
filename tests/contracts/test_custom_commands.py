@@ -5,14 +5,16 @@ from typing import Any
 
 import pytest
 
-from tests.support.harness import load_public_api
+from tests.support.harness import public_api
+
+pytestmark = pytest.mark.contract
 
 CUSTOM_COMMANDS_REASON = "Python-defined custom commands are not implemented yet"
 CUSTOM_COMMAND_CONTEXT_REASON = "Python custom command context bridging is not implemented yet"
 
 
 def make_custom_command_session(**kwargs: Any) -> Any:
-    Bash = load_public_api().Bash
+    Bash = public_api().Bash
     try:
         parameters = inspect.signature(Bash).parameters
     except (TypeError, ValueError) as exc:  # pragma: no cover - defensive

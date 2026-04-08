@@ -73,6 +73,13 @@ addopts = "-ra"
 testpaths = ["tests"]
 xfail_strict = true
 filterwarnings = ["error"]
+markers = [
+    "api: public Python API contract tests",
+    "parity: differential wrapper-vs-upstream tests",
+    "generated: property-based generated scenarios",
+    "contract: future-facing capability contracts",
+    "packaging: distribution and installation contracts",
+]
 
 [tool.coverage.run]
 patch = ["subprocess"]
@@ -80,6 +87,13 @@ concurrency = ["multiprocessing", "thread"]
 branch = true
 data_file = ".coverage/.coverage"
 source = ["src/just_py_bash"]
+
+[tool.coverage.paths]
+source = [
+    "src/just_py_bash",
+    "*/site-packages/just_py_bash",
+    "*\\site-packages\\just_py_bash",
+]
 
 [tool.coverage.report]
 skip_covered = true

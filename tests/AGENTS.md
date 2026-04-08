@@ -12,10 +12,14 @@ The suite is organized around capabilities and responsibilities, not the order f
 
 - `tests/api/`
   - public Python API behavior that should remain stable across refactors
+  - marked with `@pytest.mark.api`
 - `tests/parity/`
   - upstream differential tests; this is the main oracle for wrapper correctness
+  - marked with `@pytest.mark.parity`
 - `tests/contracts/`
   - future-facing capability contracts that are intentionally `xfail(strict=True)` until implemented
+  - marked with `@pytest.mark.contract`
+  - packaging/installability tests also use `@pytest.mark.packaging`
 - `tests/support/`
   - black-box harness code and the direct Node reference runner
 - `tests/conftest.py`
@@ -169,6 +173,20 @@ Good:
 - `test_installed_wheel_console_script_runs_without_repo_checkout`
 
 Avoid names that only reflect implementation order, temporary project phases, or local refactor history.
+
+## Coverage guidance
+
+Coverage should represent the stable core of the wrapper, not just whatever happened to execute in noisy subprocess trees.
+
+Guidelines:
+
+- keep subprocess coverage enabled; it is important for long-term confidence in the bridge
+- do not silence noisy coverage behavior prematurely just to get a cleaner number
+- prefer **better structure** over suppression:
+  - `api` + `parity` are the most stable view of core wrapper coverage
+  - `contract` and especially `packaging` tests are still important, but they may spawn isolated interpreters and create noisier coverage artifacts
+- keep path mapping capable of merging repo-source execution and installed-package execution over time
+- if we later split coverage lanes in CI, do it via markers and explicit job boundaries rather than ad hoc warning suppression
 
 ## Practical maintenance rules
 

@@ -5,7 +5,19 @@ from typing import Any
 
 import pytest
 
-from tests.support.harness import BackendArtifacts, load_public_api, run_differential_scenario
+from tests.support.harness import (
+    BackendArtifacts,
+    op_exec,
+    op_get_cwd,
+    op_read_bytes,
+    op_read_text,
+    op_write_bytes,
+    op_write_text,
+    public_api,
+    run_differential_scenario,
+)
+
+pytestmark = pytest.mark.parity
 
 ScenarioFactory = Callable[[], dict[str, Any]]
 CuratedScenario = tuple[str, ScenarioFactory, list[dict[str, Any]]]
@@ -27,7 +39,7 @@ def make_initial_files_and_command_allowlist_session() -> dict[str, Any]:
     return {
         "files": {"/seed.txt": "seed\n"},
         "commands": ["cat", "echo"],
-        "execution_limits": load_public_api().ExecutionLimits(max_command_count=50),
+        "execution_limits": public_api().ExecutionLimits(max_command_count=50),
     }
 
 
@@ -44,100 +56,67 @@ CURATED_SCENARIOS: list[CuratedScenario] = [
         "shell_state_isolated_but_filesystem_persists",
         make_shell_state_isolated_but_filesystem_persists_session,
         [
-            {
-                "op": "exec",
-                "script": "printf 'hello\\n' > note.txt; export TEMP=42; cd /",
-            },
-            {
-                "op": "exec",
-                "script": 'printf \'%s|%s|%s\' "$(cat note.txt)" "${TEMP:-unset}" "$PWD"',
-            },
-            {"op": "read_text", "path": "note.txt"},
-            {"op": "get_cwd"},
+            op_exec("printf 'hello\\n' > note.txt; export TEMP=42; cd /"),
+            op_exec('printf \'%s|%s|%s\' "$(cat note.txt)" "${TEMP:-unset}" "$PWD"'),
+            op_read_text("note.txt"),
+            op_get_cwd(),
         ],
     ),
     (
         "exec_options_and_timeout",
         make_exec_options_and_timeout_session,
         [
-            {"op": "exec", "script": "mkdir -p /workspace/subdir"},
-            {"op": "exec", "script": "cat", "kwargs": {"stdin": "from-stdin\n"}},
-            {
-                "op": "exec",
-                "script": 'printf \'%s|%s\' "${ONLY:-missing}" "${HOME:-missing}"',
-                "kwargs": {"replace_env": True, "env": {"ONLY": "yes"}},
-            },
-            {
-                "op": "exec",
-                "script": "printf '%s|%s|%s' foo",
-                "kwargs": {"args": ["bar", "baz"]},
-            },
-            {
-                "op": "exec",
-                "script": "printf '%s' \"$PWD\"",
-                "kwargs": {"cwd": "/workspace/subdir"},
-            },
-            {"op": "exec", "script": "sleep 1", "kwargs": {"timeout": 0.01}},
+            op_exec("mkdir -p /workspace/subdir"),
+            op_exec("cat", stdin="from-stdin\n"),
+            op_exec(
+                'printf \'%s|%s\' "${ONLY:-missing}" "${HOME:-missing}"',
+                replace_env=True,
+                env={"ONLY": "yes"},
+            ),
+            op_exec("printf '%s|%s|%s' foo", args=["bar", "baz"]),
+            op_exec("printf '%s' \"$PWD\"", cwd="/workspace/subdir"),
+            op_exec("sleep 1", timeout=0.01),
         ],
     ),
     (
         "binary_round_trip",
         make_binary_round_trip_session,
         [
-            {
-                "op": "write_bytes",
-                "path": "/payload.bin",
-                "content": b"\x00\xffABC",
-            },
-            {"op": "read_bytes", "path": "/payload.bin"},
-            {"op": "exec", "script": "wc -c < /payload.bin"},
-            {"op": "exec", "script": "base64 /payload.bin"},
+            op_write_bytes("/payload.bin", b"\x00\xffABC"),
+            op_read_bytes("/payload.bin"),
+            op_exec("wc -c < /payload.bin"),
+            op_exec("base64 /payload.bin"),
         ],
     ),
     (
         "initial_files_and_command_allowlist",
         make_initial_files_and_command_allowlist_session,
         [
-            {"op": "exec", "script": "cat /seed.txt"},
-            {"op": "exec", "script": "pwd"},
+            op_exec("cat /seed.txt"),
+            op_exec("pwd"),
         ],
     ),
     (
         "empty_values_are_transported_exactly",
         make_empty_values_are_transported_exactly_session,
         [
-            {"op": "exec", "script": "cat", "kwargs": {"stdin": ""}},
-            {
-                "op": "exec",
-                "script": 'printf \'%s|%s|%s\' "${BASE:-missing}" "${ONLY:-missing}" "${HOME:-missing}"',
-                "kwargs": {"replace_env": True, "env": {}},
-            },
-            {
-                "op": "exec",
-                "script": "printf '%s|%s|%s' foo",
-                "kwargs": {"args": []},
-            },
+            op_exec("cat", stdin=""),
+            op_exec(
+                'printf \'%s|%s|%s\' "${BASE:-missing}" "${ONLY:-missing}" "${HOME:-missing}"',
+                replace_env=True,
+                env={},
+            ),
+            op_exec("printf '%s|%s|%s' foo", args=[]),
         ],
     ),
     (
         "unicode_and_raw_script_round_trip",
         make_unicode_and_raw_script_round_trip_session,
         [
-            {
-                "op": "write_text",
-                "path": "unicode.txt",
-                "content": "héllo 🌍\n",
-            },
-            {"op": "exec", "script": "cat unicode.txt"},
-            {
-                "op": "exec",
-                "script": "cat <<'EOF'\nhello\n    EOF",
-            },
-            {
-                "op": "exec",
-                "script": "cat <<'EOF'\nhello\n    EOF",
-                "kwargs": {"raw_script": True},
-            },
+            op_write_text("unicode.txt", "héllo 🌍\n"),
+            op_exec("cat unicode.txt"),
+            op_exec("cat <<'EOF'\nhello\n    EOF"),
+            op_exec("cat <<'EOF'\nhello\n    EOF", raw_script=True),
         ],
     ),
 ]
@@ -148,7 +127,7 @@ CURATED_SCENARIOS: list[CuratedScenario] = [
     CURATED_SCENARIOS,
     ids=[name for name, _, _ in CURATED_SCENARIOS],
 )
-def test_curated_session_scenarios_match_upstream(
+def test_scenarios_match_upstream(
     name: str,
     init_factory: ScenarioFactory,
     operations: list[dict[str, Any]],

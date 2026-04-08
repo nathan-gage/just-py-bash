@@ -12,6 +12,8 @@ from tests.contracts.test_custom_commands import (
     make_custom_command_session,
 )
 
+pytestmark = [pytest.mark.contract, pytest.mark.generated]
+
 BLACKLIST_CATEGORIES: tuple[Literal["Cs"], ...] = ("Cs",)
 TEXT_VALUES = st.text(
     alphabet=st.characters(

@@ -74,7 +74,7 @@ def decode_bytes_payload(payload: dict[str, str]) -> bytes:
     return base64.b64decode(payload[BYTE_TAG].encode("ascii"))
 
 
-def load_public_api() -> Any:
+def public_api() -> Any:
     return import_module("just_py_bash")
 
 
@@ -254,12 +254,43 @@ def run_reference_scenario(
     return cast(dict[str, Any], payload)
 
 
+def op_exec(script: str, **kwargs: Any) -> dict[str, Any]:
+    operation: dict[str, Any] = {"op": "exec", "script": script}
+    if kwargs:
+        operation["kwargs"] = kwargs
+    return operation
+
+
+def op_read_text(path: str) -> dict[str, Any]:
+    return {"op": "read_text", "path": path}
+
+
+def op_read_bytes(path: str) -> dict[str, Any]:
+    return {"op": "read_bytes", "path": path}
+
+
+def op_write_text(path: str, content: str) -> dict[str, Any]:
+    return {"op": "write_text", "path": path, "content": content}
+
+
+def op_write_bytes(path: str, content: bytes) -> dict[str, Any]:
+    return {"op": "write_bytes", "path": path, "content": content}
+
+
+def op_get_env() -> dict[str, Any]:
+    return {"op": "get_env"}
+
+
+def op_get_cwd() -> dict[str, Any]:
+    return {"op": "get_cwd"}
+
+
 def run_python_scenario(
     *,
     init_kwargs: Mapping[str, Any],
     operations: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    bash_type = load_public_api().Bash
+    bash_type = public_api().Bash
     with bash_type(**dict(init_kwargs)) as bash:
         results: list[Any] = []
         for operation in operations:
@@ -311,12 +342,9 @@ def run_differential_scenario(
 
 def session_snapshot_operations(*, root: str = "/workspace") -> list[dict[str, Any]]:
     return [
-        {"op": "get_cwd"},
-        {"op": "get_env"},
-        {
-            "op": "exec",
-            "script": f"find {root} -maxdepth 2 -mindepth 1 | sort",
-        },
+        op_get_cwd(),
+        op_get_env(),
+        op_exec(f"find {root} -maxdepth 2 -mindepth 1 | sort"),
     ]
 
 
@@ -325,7 +353,14 @@ __all__ = [
     "BYTE_TAG",
     "decode_bytes_payload",
     "encode_file_value",
-    "load_public_api",
+    "op_exec",
+    "op_get_cwd",
+    "op_get_env",
+    "op_read_bytes",
+    "op_read_text",
+    "op_write_bytes",
+    "op_write_text",
+    "public_api",
     "normalize_exec_result",
     "normalize_operation_error",
     "session_snapshot_operations",
