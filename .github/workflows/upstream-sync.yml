@@ -136,6 +136,6 @@ jobs:
             - `just-py-bash` version remains: `${{ steps.sync.outputs.python_package_to_version }}`
 
             Upstream changed without a new upstream package version, so this PR is not marked as a release candidate by default.
-          labels: |
+          labels: |-
             automation
             upstream-sync

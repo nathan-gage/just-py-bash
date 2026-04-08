@@ -3,18 +3,12 @@ name = "just-py-bash"
 version = "2.14.0"
 description = "A Python wrapper around the just-bash virtual shell"
 readme = "README.md"
-authors = [
-    { name = "Nathan Gage", email = "nathan@sweetspot.so" }
-]
+authors = [{ name = "Nathan Gage", email = "nathan@sweetspot.so" }]
 requires-python = ">=3.11"
-dependencies = [
-    "pydantic>=2.10",
-]
+dependencies = ["pydantic>=2.10"]
 
 [project.optional-dependencies]
-node = [
-    "just-bash-bundled-runtime>=22,<23",
-]
+node = ["just-bash-bundled-runtime>=22,<23"]
 
 [project.scripts]
 just-py-bash = "just_bash:main"
@@ -24,13 +18,11 @@ just-bash-bundled-runtime = { path = "../just_bash_bundled_runtime" }
 
 [tool.hatch.build]
 artifacts = [
-    "src/just_bash/_vendor/just-bash/package.json",
-    "src/just_bash/_vendor/just-bash/dist/**",
-    "src/just_bash/_vendor/just-bash/vendor/**",
+  "src/just_bash/_vendor/just-bash/package.json",
+  "src/just_bash/_vendor/just-bash/dist/**",
+  "src/just_bash/_vendor/just-bash/vendor/**",
 ]
-exclude = [
-    "src/just_bash/__pycache__/**",
-]
+exclude = ["src/just_bash/__pycache__/**"]
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
@@ -40,11 +32,11 @@ packages = ["src/just_bash"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "README.md",
-    "pyproject.toml",
-    "hatch_build.py",
-    "tools/build_packaged_runtime.sh",
-    "src/just_bash/**",
+  "README.md",
+  "pyproject.toml",
+  "hatch_build.py",
+  "tools/build_packaged_runtime.sh",
+  "src/just_bash/**",
 ]
 
 [build-system]

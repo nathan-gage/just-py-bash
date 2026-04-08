@@ -3,16 +3,14 @@ name = "just-bash-bundled-runtime"
 version = "22.22.2"
 description = "First-party bundled Node.js runtime provider for just-py-bash"
 readme = "README.md"
-authors = [
-    { name = "Nathan Gage", email = "nathan@sweetspot.so" }
-]
+authors = [{ name = "Nathan Gage", email = "nathan@sweetspot.so" }]
 requires-python = ">=3.11"
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3 :: Only",
-    "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS",
-    "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
 ]
 
 [build-system]
@@ -21,12 +19,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build]
 artifacts = [
-    "src/just_bash_bundled_runtime/runtime/**",
-    "src/just_bash_bundled_runtime/runtime-metadata.json",
+  "src/just_bash_bundled_runtime/runtime/**",
+  "src/just_bash_bundled_runtime/runtime-metadata.json",
 ]
-exclude = [
-    "src/just_bash_bundled_runtime/__pycache__/**",
-]
+exclude = ["src/just_bash_bundled_runtime/__pycache__/**"]
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
@@ -36,8 +32,8 @@ packages = ["src/just_bash_bundled_runtime"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "README.md",
-    "pyproject.toml",
-    "hatch_build.py",
-    "src/just_bash_bundled_runtime/**",
+  "README.md",
+  "pyproject.toml",
+  "hatch_build.py",
+  "src/just_bash_bundled_runtime/**",
 ]

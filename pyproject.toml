@@ -6,16 +6,18 @@ dependencies = []
 
 [dependency-groups]
 dev = [
-    "coverage[toml]>=7.10.7",
-    "hypothesis>=6.142.4",
-    "just-py-bash[node]",
-    "pytest>=9.0.0",
-    "pytest-xdist>=3.6.1",
+  "coverage[toml]>=7.10.7",
+  "hypothesis>=6.142.4",
+  "just-py-bash[node]",
+  "pytest>=9.0.0",
+  "pytest-xdist>=3.6.1",
 ]
 lint = [
-    "mypy>=1.11.2",
-    "pyright>=1.1.408",
-    "ruff>=0.14.14",
+  "mypy>=1.11.2",
+  "pyright>=1.1.408",
+  "ruff>=0.14.14",
+  "taplo>=0.9.3",
+  "yamlfix>=1.19.1",
 ]
 
 [tool.uv]
@@ -26,20 +28,32 @@ default-groups = ["dev", "lint"]
 just-py-bash = { path = "just_py_bash", editable = true }
 just-bash-bundled-runtime = { path = "just_bash_bundled_runtime", editable = true }
 
+[tool.yamlfix]
+explicit_start = false
+preserve_quotes = true
+sequence_style = "keep_style"
+line_length = 120
+section_whitelines = 1
+whitelines = 1
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-include = ["just_py_bash/src/**/*.py", "just_py_bash/tools/**/*.py", "just_py_bash/hatch_build.py", "just_bash_bundled_runtime/src/**/*.py", "just_bash_bundled_runtime/tools/**/*.py", "just_bash_bundled_runtime/hatch_build.py", "tests/**/*.py"]
-extend-exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime"]
+include = [
+  "just_py_bash/src/**/*.py",
+  "just_py_bash/tools/**/*.py",
+  "just_py_bash/hatch_build.py",
+  "just_bash_bundled_runtime/src/**/*.py",
+  "just_bash_bundled_runtime/tools/**/*.py",
+  "just_bash_bundled_runtime/hatch_build.py",
+  "tests/**/*.py",
+]
+extend-exclude = [
+  "just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime",
+]
 
 [tool.ruff.lint]
-extend-select = [
-    "B",
-    "I",
-    "Q",
-    "RUF100",
-    "UP",
-]
+extend-select = ["B", "I", "Q", "RUF100", "UP"]
 flake8-quotes = { inline-quotes = "double", multiline-quotes = "double" }
 
 [tool.ruff.format]
@@ -51,19 +65,39 @@ pythonVersion = "3.11"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
 reportUnnecessaryTypeIgnoreComment = true
-include = ["just_py_bash/src", "just_py_bash/tools", "just_bash_bundled_runtime/src", "just_bash_bundled_runtime/tools", "tests"]
+include = [
+  "just_py_bash/src",
+  "just_py_bash/tools",
+  "just_bash_bundled_runtime/src",
+  "just_bash_bundled_runtime/tools",
+  "tests",
+]
 exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime"]
 venvPath = "."
 venv = ".venv"
 executionEnvironments = [
-    { root = ".", extraPaths = ["just_py_bash/src", "just_bash_bundled_runtime/src"] },
-    { root = "tests", extraPaths = ["just_py_bash/src", "just_bash_bundled_runtime/src"], reportPrivateImportUsage = false },
-    { root = "just_bash_bundled_runtime/src", extraPaths = ["just_bash_bundled_runtime/src"] },
+  { root = ".", extraPaths = [
+    "just_py_bash/src",
+    "just_bash_bundled_runtime/src",
+  ] },
+  { root = "tests", extraPaths = [
+    "just_py_bash/src",
+    "just_bash_bundled_runtime/src",
+  ], reportPrivateImportUsage = false },
+  { root = "just_bash_bundled_runtime/src", extraPaths = [
+    "just_bash_bundled_runtime/src",
+  ] },
 ]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["just_py_bash/src", "just_py_bash/tools", "just_bash_bundled_runtime/src", "just_bash_bundled_runtime/tools", "tests"]
+files = [
+  "just_py_bash/src",
+  "just_py_bash/tools",
+  "just_bash_bundled_runtime/src",
+  "just_bash_bundled_runtime/tools",
+  "tests",
+]
 exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/"]
 mypy_path = "just_py_bash/src"
 strict = true
@@ -74,11 +108,11 @@ testpaths = ["tests"]
 xfail_strict = true
 filterwarnings = ["error"]
 markers = [
-    "api: public Python API contract tests",
-    "parity: differential wrapper-vs-upstream tests",
-    "generated: property-based generated scenarios",
-    "contract: future-facing capability contracts",
-    "packaging: distribution and installation contracts",
+  "api: public Python API contract tests",
+  "parity: differential wrapper-vs-upstream tests",
+  "generated: property-based generated scenarios",
+  "contract: future-facing capability contracts",
+  "packaging: distribution and installation contracts",
 ]
 
 [tool.coverage.run]
@@ -90,9 +124,9 @@ source = ["just_py_bash/src/just_bash"]
 
 [tool.coverage.paths]
 source = [
-    "just_py_bash/src/just_bash",
-    "*/site-packages/just_bash",
-    "*\\site-packages\\just_bash",
+  "just_py_bash/src/just_bash",
+  "*/site-packages/just_bash",
+  "*\\site-packages\\just_bash",
 ]
 
 [tool.coverage.report]
@@ -100,9 +134,9 @@ skip_covered = true
 show_missing = true
 precision = 2
 exclude_lines = [
-    "pragma: no cover",
-    "if TYPE_CHECKING:",
-    "raise NotImplementedError",
-    "@overload",
-    "if __name__ == .__main__.:",
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "@overload",
+  "if __name__ == .__main__.:",
 ]

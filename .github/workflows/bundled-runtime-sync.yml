@@ -85,7 +85,7 @@ jobs:
 
             This PR updates `just_bash_bundled_runtime/pyproject.toml` to the latest Node.js LTS patch in the tracked major line.
             It is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite before you decide whether to merge and publish it.
-          labels: |
+          labels: |-
             automation
             bundled-runtime
             release-candidate

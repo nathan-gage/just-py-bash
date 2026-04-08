@@ -349,7 +349,7 @@ jobs:
         run: uv build just_bash_bundled_runtime --wheel --out-dir dist-node
 
       - name: Smoke test bundled runtime wheel
-        run: |
+        run: |-
           uv run python - <<'PY'
           import subprocess
           import sys

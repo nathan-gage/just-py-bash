@@ -1,5 +1,10 @@
 .DEFAULT_GOAL := all
 
+TOML_FILES := pyproject.toml just_py_bash/pyproject.toml just_bash_bundled_runtime/pyproject.toml
+YAML_FILES := $(wildcard .github/workflows/*.yml)
+TAPLO := uv run taplo
+YAMLFIX := uv run yamlfix
+
 .PHONY: .uv
 .uv: ## Check that uv is installed
 	@uv --version || echo 'Please install uv: https://docs.astral.sh/uv/getting-started/installation/'
@@ -46,14 +51,36 @@ clean: ## Remove generated build artifacts
 build-bundled-runtime: vendor-bundled-runtime ## Build a wheel for just_bash_bundled_runtime
 	uv build just_bash_bundled_runtime --wheel --out-dir dist-node
 
-.PHONY: format
-format: ## Format the code
+.PHONY: format-python
+format-python: ## Format Python code
 	uv run ruff format --preview
 	uv run ruff check --fix --fix-only
 
-.PHONY: format-check
-format-check: ## Check formatting without modifying files
+.PHONY: format-toml
+format-toml: ## Format TOML files
+	$(TAPLO) format $(TOML_FILES)
+
+.PHONY: format-yaml
+format-yaml: ## Format YAML workflow files
+	$(YAMLFIX) $(YAML_FILES)
+
+.PHONY: format
+format: format-python format-toml format-yaml ## Format the codebase
+
+.PHONY: format-check-python
+format-check-python: ## Check Python formatting without modifying files
 	uv run ruff format --check --preview
+
+.PHONY: format-check-toml
+format-check-toml: ## Check TOML formatting without modifying files
+	$(TAPLO) format --check $(TOML_FILES)
+
+.PHONY: format-check-yaml
+format-check-yaml: ## Check YAML formatting without modifying files
+	$(YAMLFIX) --check $(YAML_FILES)
+
+.PHONY: format-check
+format-check: format-check-python format-check-toml format-check-yaml ## Check formatting without modifying files
 
 .PHONY: lint
 lint: ## Lint the code
