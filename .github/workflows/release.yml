@@ -2,23 +2,19 @@ name: Release just-py-bash
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: Git ref to release
-        required: false
-        default: main
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 concurrency:
-  group: release-just-py-bash-${{ inputs.ref || github.ref }}
+  group: release-just-py-bash-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   detect:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
@@ -26,12 +22,25 @@ jobs:
       ref: ${{ steps.version.outputs.ref }}
 
     steps:
+      - name: Validate workflow ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          case "$WORKFLOW_REF" in
+            refs/heads/main) ;;
+            *)
+              echo "Release workflows must be dispatched from refs/heads/main; got: $WORKFLOW_REF" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Check out repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref }}
+          ref: main
           submodules: recursive
+          persist-credentials: false
 
       - name: Read package version
         id: version
@@ -80,6 +89,9 @@ jobs:
     needs: detect
     if: needs.detect.outputs.tag_exists != 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     environment:
       name: pypi-just-py-bash
       url: https://pypi.org/p/just-py-bash
@@ -91,6 +103,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.detect.outputs.ref }}
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
@@ -116,12 +129,13 @@ jobs:
 
       - name: Create and push tag
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           TAG: ${{ needs.detect.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$TAG"
-          git push origin "$TAG"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TAG"
 
       - name: Create GitHub release
         env:

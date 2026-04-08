@@ -18,11 +18,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Validate workflow ref
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          case "$WORKFLOW_REF" in
+            refs/heads/main) ;;
+            *)
+              echo "Sync workflow must run from refs/heads/main; got: $WORKFLOW_REF" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Check out repository
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: main
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8

@@ -18,6 +18,9 @@ env:
   COLUMNS: 150
   UV_FROZEN: "1"
 
+permissions:
+  contents: read
+
 concurrency:
   group: full-ci-${{ github.ref }}
   cancel-in-progress: true
@@ -37,6 +40,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Detect whether full CI should run
         id: detect
@@ -148,6 +152,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
@@ -192,6 +197,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
@@ -274,6 +280,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
@@ -326,6 +333,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8
