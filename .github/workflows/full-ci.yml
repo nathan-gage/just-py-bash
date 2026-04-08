@@ -224,12 +224,10 @@ jobs:
       - name: Vendor bundled runtime payload
         run: make vendor-bundled-runtime
 
-      - name: Install bundled Node provider package
-        run: uv pip install ./just_bash_bundled_runtime
-
       - name: Verify bundled Node works without a system node on PATH
+        shell: bash
         run: |
-          uv run python - <<'PY'
+          uv run --no-project --with ./just_py_bash --with ./just_bash_bundled_runtime python - <<'PY'
           import os
           import sys
 
@@ -268,7 +266,7 @@ jobs:
           - os: ubuntu-latest
             python-version: "3.14"
             node-version: "22"
-          - os: macos-latest
+          - os: macos-14
             python-version: "3.11"
             node-version: "22"
           - os: windows-latest
@@ -306,6 +304,7 @@ jobs:
 
       - name: Build vendored just-bash backend
         working-directory: vendor/just-bash
+        shell: bash
         run: |
           pnpm install --frozen-lockfile
           pnpm build
@@ -324,7 +323,6 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-13
           - macos-14
           - windows-latest
 
@@ -349,16 +347,11 @@ jobs:
         run: uv build just_bash_bundled_runtime --wheel --out-dir dist-node
 
       - name: Smoke test bundled runtime wheel
+        shell: bash
         run: |-
-          uv run python - <<'PY'
+          wheel=$(echo dist-node/*.whl)
+          uv run --no-project --with "$wheel" python - <<'PY'
           import subprocess
-          import sys
-          from pathlib import Path
-
-          wheel = next(Path('dist-node').glob('*.whl'))
-          install = subprocess.run([sys.executable, '-m', 'pip', 'install', '--force-reinstall', str(wheel)], check=False)
-          if install.returncode != 0:
-              raise SystemExit(install.returncode)
 
           from just_bash_bundled_runtime import get_node_command, get_runtime_metadata
 
