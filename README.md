@@ -292,4 +292,4 @@ The test suite treats upstream `just-bash` as the semantic oracle for current wr
 
 ## Design Notes
 
-See [`docs/wrapping-plan.md`](docs/wrapping-plan.md).
+See [`ROADMAP.md`](ROADMAP.md).
