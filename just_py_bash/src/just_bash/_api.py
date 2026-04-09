@@ -106,8 +106,7 @@ class Bash:
         self.close()
 
     def __repr__(self) -> str:
-        cwd = None if self.closed else self.get_cwd()
-        return f"Bash(backend_version={self.backend_version!r}, cwd={cwd!r})"
+        return f"Bash(backend_version={self.backend_version!r}, closed={self.closed!r})"
 
     def close(self) -> None:
         self._bridge.close()

@@ -84,6 +84,25 @@ def test_bash_can_close_cleanly_after_worker_crash(tmp_path: Path) -> None:
         bash.close()
 
 
+def test_bash_repr_does_not_perform_bridge_io_after_worker_crash(tmp_path: Path) -> None:
+    api = public_api()
+    worker = tmp_path / "repr-crashing-worker.py"
+    write_fake_backend(worker, mode="crash_on_exec")
+
+    bash = api.Bash(node_command=fake_node_command(worker))
+    try:
+        with pytest.raises(api.BridgeError, match="worker exited unexpectedly"):
+            bash.exec("printf boom")
+
+        rendered = repr(bash)
+    finally:
+        bash.close()
+
+    assert rendered.startswith("Bash(")
+    assert "backend_version='fake-backend'" in rendered
+    assert "closed=" in rendered
+
+
 def test_async_bash_raises_backend_unavailable_when_node_command_is_missing() -> None:
     api = public_api()
 

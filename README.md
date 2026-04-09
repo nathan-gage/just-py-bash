@@ -384,7 +384,7 @@ The test suite treats upstream `just-bash` as the semantic oracle for current wr
 - `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, and dedicated filesystem-config parity coverage
 - `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, and key execution limits using local fixtures rather than public-internet dependencies
 - `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, and installed wheel/sdist runtime behavior
-- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, and the minimal CLI surface
+- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, example smoke coverage, and the current CLI surface
 
 For day-to-day development, `make all` is the main confidence gate: format, lint, typecheck, and the full test suite.
 
