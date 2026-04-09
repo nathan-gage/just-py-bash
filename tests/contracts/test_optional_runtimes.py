@@ -14,6 +14,17 @@ pytestmark = pytest.mark.contract
 
 @pytest.fixture(scope="module")
 def packaged_runtime_artifacts(tmp_path_factory: pytest.TempPathFactory) -> tuple[str, str]:
+    prebuilt_js_entry = os.environ.get("JUST_BASH_TEST_PACKAGED_JS_ENTRY")
+    prebuilt_package_json = os.environ.get("JUST_BASH_TEST_PACKAGED_PACKAGE_JSON")
+    if prebuilt_js_entry and prebuilt_package_json:
+        js_entry = Path(prebuilt_js_entry)
+        package_json = Path(prebuilt_package_json)
+        if not js_entry.exists():
+            raise AssertionError(f"Configured packaged runtime entrypoint missing: {js_entry}")
+        if not package_json.exists():
+            raise AssertionError(f"Configured packaged runtime package.json missing: {package_json}")
+        return str(js_entry), str(package_json)
+
     runtime_root = tmp_path_factory.mktemp("packaged-runtime") / "just-bash"
     env = os.environ.copy()
     env["JUST_BASH_PACKAGED_RUNTIME_OUT_DIR"] = str(runtime_root)

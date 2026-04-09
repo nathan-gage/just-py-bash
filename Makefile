@@ -14,8 +14,12 @@ YAMLFIX := uv run yamlfix
 	@pnpm --version || echo 'Please install pnpm: https://pnpm.io/installation'
 
 .PHONY: install-python
-install-python: .uv ## Install Python development dependencies
+install-python: .uv ## Install Python development and lint dependencies
 	uv sync --frozen
+
+.PHONY: install-python-tests
+install-python-tests: .uv ## Install only the Python test dependencies needed for runtime CI jobs
+	uv sync --frozen --only-group dev
 
 .PHONY: install
 install: install-python bootstrap-just-bash build-packaged-runtime ## Install development deps and prepare the packaged just-bash runtime
@@ -26,18 +30,21 @@ sync: .uv ## Update local packages and uv.lock
 
 .PHONY: bootstrap-just-bash
 bootstrap-just-bash: .pnpm ## Install and build vendored just-bash backend
-	cd vendor/just-bash && pnpm install && pnpm build
+	cd vendor/just-bash && pnpm install --frozen-lockfile && pnpm build
 
 .PHONY: setup
 setup: install ## Backward-compatible alias for install
 
 .PHONY: vendor-bundled-runtime
 vendor-bundled-runtime: .uv ## Download and verify the official Node runtime for just_bash_bundled_runtime
-	uv run python just_bash_bundled_runtime/tools/vendor_runtime.py
+	uv run --no-project python just_bash_bundled_runtime/tools/vendor_runtime.py
 
 .PHONY: build-packaged-runtime
 build-packaged-runtime: bootstrap-just-bash ## Build the packaged just-bash runtime payload used by the Python wrapper
 	bash just_py_bash/tools/build_packaged_runtime.sh
+
+.PHONY: prepare-test-backend
+prepare-test-backend: build-packaged-runtime ## Build vendored just-bash assets reused by source-checkout test jobs
 
 .PHONY: build-package
 build-package: bootstrap-just-bash ## Build wheel and sdist for just-py-bash
