@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import shlex
@@ -10,12 +11,13 @@ import threading
 import weakref
 from collections import deque
 from collections.abc import Mapping, Sequence
+from ctypes import wintypes
 from dataclasses import dataclass
 from hashlib import sha256
 from itertools import count
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Literal, overload
+from typing import Any, Literal, overload
 
 from ._bridge_protocol import (
     DEFAULT_TIMEOUT_SECONDS,
@@ -75,12 +77,36 @@ def write_worker_file() -> Path:
         return worker_path
 
 
+def split_command_string(command: str) -> list[str]:
+    if os.name != "nt":
+        return shlex.split(command)
+
+    ctypes_module: Any = ctypes
+    windll = ctypes_module.windll
+    command_line_to_argv = windll.shell32.CommandLineToArgvW
+    command_line_to_argv.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(ctypes.c_int)]
+    command_line_to_argv.restype = ctypes.POINTER(wintypes.LPWSTR)
+    local_free = windll.kernel32.LocalFree
+    local_free.argtypes = [wintypes.HLOCAL]
+    local_free.restype = wintypes.HLOCAL
+
+    argc = ctypes.c_int(0)
+    argv = command_line_to_argv(command, ctypes.byref(argc))
+    if not argv:
+        raise BackendUnavailableError(f"Could not parse JUST_BASH_NODE command: {command!r}")
+
+    try:
+        return [argv[index] for index in range(argc.value)]
+    finally:
+        local_free(argv)
+
+
 def resolve_node_command(node_command: Sequence[str] | None = None) -> list[str]:
     if node_command:
         return [str(part) for part in node_command]
 
     if configured := os.environ.get("JUST_BASH_NODE"):
-        return shlex.split(configured)
+        return split_command_string(configured)
 
     bundled = resolve_bundled_node_command()
     if bundled is not None:
