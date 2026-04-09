@@ -177,3 +177,28 @@ jobs:
 
       - name: Run non-packaging test suite
         run: make test-non-packaging
+
+  required:
+    name: ci / required
+    needs:
+      - backend
+      - checks
+      - tests
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify required CI jobs passed
+        shell: bash
+        env:
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          TESTS_RESULT: ${{ needs.tests.result }}
+        run: |-
+          echo "backend=$BACKEND_RESULT"
+          echo "checks=$CHECKS_RESULT"
+          echo "tests=$TESTS_RESULT"
+
+          [[ "$BACKEND_RESULT" == "success" ]]
+          [[ "$CHECKS_RESULT" == "success" ]]
+          [[ "$TESTS_RESULT" == "success" ]]
