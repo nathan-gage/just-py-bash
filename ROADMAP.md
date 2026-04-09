@@ -23,7 +23,7 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `99 passed`
+- The current local test count is `100 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 
@@ -118,9 +118,9 @@ These should stay wrapper-focused: verify Python-side limit fields, wire transla
 
 #### Small correctness follow-ups
 
-- [ ] change `Bash.__repr__()` so it no longer performs live bridge I/O
-- [ ] keep backend artifact inference behavior documented and covered
-- [ ] keep README and roadmap aligned with the actual shipped/tested surface
+- [x] change `Bash.__repr__()` so it no longer performs live bridge I/O
+- [x] keep backend artifact inference behavior documented and covered
+- [x] keep README and roadmap aligned with the actual shipped/tested surface
 
 ### CLI parity
 
