@@ -514,3 +514,52 @@ jobs:
           print(metadata['platform'])
           print(completed.stdout.strip())
           PY
+
+  required:
+    name: full-ci / required
+    needs:
+      - detect
+      - prepare-backend
+      - full
+      - bundled-node
+      - native-build-smoke
+      - runtime-compat
+      - bundled-runtime-packaging
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify required Full CI jobs passed or were intentionally skipped
+        shell: bash
+        env:
+          RUN_FULL: ${{ needs.detect.outputs.run_full }}
+          DETECT_RESULT: ${{ needs.detect.result }}
+          PREPARE_BACKEND_RESULT: ${{ needs['prepare-backend'].result }}
+          FULL_RESULT: ${{ needs.full.result }}
+          BUNDLED_NODE_RESULT: ${{ needs['bundled-node'].result }}
+          NATIVE_BUILD_SMOKE_RESULT: ${{ needs['native-build-smoke'].result }}
+          RUNTIME_COMPAT_RESULT: ${{ needs['runtime-compat'].result }}
+          BUNDLED_RUNTIME_PACKAGING_RESULT: ${{ needs['bundled-runtime-packaging'].result }}
+        run: |-
+          echo "run_full=$RUN_FULL"
+          echo "detect=$DETECT_RESULT"
+          echo "prepare-backend=$PREPARE_BACKEND_RESULT"
+          echo "full=$FULL_RESULT"
+          echo "bundled-node=$BUNDLED_NODE_RESULT"
+          echo "native-build-smoke=$NATIVE_BUILD_SMOKE_RESULT"
+          echo "runtime-compat=$RUNTIME_COMPAT_RESULT"
+          echo "bundled-runtime-packaging=$BUNDLED_RUNTIME_PACKAGING_RESULT"
+
+          [[ "$DETECT_RESULT" == "success" ]]
+
+          if [[ "$RUN_FULL" != "true" ]]; then
+            echo "Full CI not required for this change."
+            exit 0
+          fi
+
+          [[ "$PREPARE_BACKEND_RESULT" == "success" ]]
+          [[ "$FULL_RESULT" == "success" ]]
+          [[ "$BUNDLED_NODE_RESULT" == "success" ]]
+          [[ "$NATIVE_BUILD_SMOKE_RESULT" == "success" ]]
+          [[ "$RUNTIME_COMPAT_RESULT" == "success" ]]
+          [[ "$BUNDLED_RUNTIME_PACKAGING_RESULT" == "success" ]]
