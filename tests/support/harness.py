@@ -201,6 +201,10 @@ def to_reference_init_options(init_kwargs: Mapping[str, Any]) -> dict[str, Any]:
     if cwd is not None:
         payload["cwd"] = cwd
 
+    filesystem = init_kwargs.get("fs")
+    if filesystem is not None:
+        payload["fs"] = filesystem.to_wire() if hasattr(filesystem, "to_wire") else filesystem
+
     commands = init_kwargs.get("commands")
     if commands is not None:
         payload["commands"] = list(commands)
@@ -425,12 +429,13 @@ def run_differential_scenario(
     init_kwargs: Mapping[str, Any],
     operations: Sequence[Mapping[str, Any]],
     backend_artifacts: BackendArtifacts,
+    reference_init_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     python_result = run_python_scenario(init_kwargs=init_kwargs, operations=operations)
     reference_result = run_reference_scenario(
         js_entry=backend_artifacts.js_entry,
         package_json=backend_artifacts.package_json,
-        init_options=to_reference_init_options(init_kwargs),
+        init_options=to_reference_init_options(init_kwargs if reference_init_kwargs is None else reference_init_kwargs),
         operations=[to_reference_operation(operation) for operation in operations],
     )
     return python_result, reference_result
@@ -441,12 +446,13 @@ def run_async_differential_scenario(
     init_kwargs: Mapping[str, Any],
     operations: Sequence[Mapping[str, Any]],
     backend_artifacts: BackendArtifacts,
+    reference_init_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     python_result = run_async_python_scenario(init_kwargs=init_kwargs, operations=operations)
     reference_result = run_reference_scenario(
         js_entry=backend_artifacts.js_entry,
         package_json=backend_artifacts.package_json,
-        init_options=to_reference_init_options(init_kwargs),
+        init_options=to_reference_init_options(init_kwargs if reference_init_kwargs is None else reference_init_kwargs),
         operations=[to_reference_operation(operation) for operation in operations],
     )
     return python_result, reference_result

@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 const BYTE_TAG = '__just_bash_bytes__';
 
 let BashClass = null;
+let backendModule = null;
 let bash = null;
 let backendVersion = null;
 let nextInvocationId = 1;
@@ -95,12 +96,53 @@ function createPythonCustomCommand(name) {
   };
 }
 
+function decodeFs(spec) {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+    throw new Error('Unsupported fs config payload');
+  }
+  if (!backendModule) {
+    throw new Error('Backend module is not loaded');
+  }
+
+  switch (spec.kind) {
+    case 'in_memory':
+      return new backendModule.InMemoryFs(decodeFiles(spec.files));
+    case 'overlay':
+      return new backendModule.OverlayFs({
+        root: spec.root,
+        mountPoint: spec.mountPoint,
+        readOnly: spec.readOnly,
+        maxFileReadSize: spec.maxFileReadSize,
+        allowSymlinks: spec.allowSymlinks,
+      });
+    case 'read_write':
+      return new backendModule.ReadWriteFs({
+        root: spec.root,
+        maxFileReadSize: spec.maxFileReadSize,
+        allowSymlinks: spec.allowSymlinks,
+      });
+    case 'mountable':
+      return new backendModule.MountableFs({
+        base: spec.base ? decodeFs(spec.base) : undefined,
+        mounts: Array.isArray(spec.mounts)
+          ? spec.mounts.map((mount) => ({
+              mountPoint: mount.mountPoint,
+              filesystem: decodeFs(mount.filesystem),
+            }))
+          : undefined,
+      });
+    default:
+      throw new Error(`Unknown fs config kind: ${String(spec.kind)}`);
+  }
+}
+
 function decodeInitOptions(options) {
   const decoded = {};
 
   if (options.files !== undefined) decoded.files = decodeFiles(options.files);
   if (options.env !== undefined) decoded.env = options.env;
   if (options.cwd !== undefined) decoded.cwd = options.cwd;
+  if (options.fs !== undefined) decoded.fs = decodeFs(options.fs);
   if (options.commands !== undefined) decoded.commands = options.commands;
   if (options.python !== undefined) decoded.python = options.python;
   if (options.javascript !== undefined) decoded.javascript = options.javascript;
@@ -207,6 +249,7 @@ async function handleMessage(message) {
     case 'init': {
       const moduleUrl = pathToFileURL(message.jsEntry).href;
       const mod = await import(moduleUrl);
+      backendModule = mod;
       BashClass = mod.Bash;
       bash = new BashClass(decodeInitOptions(message.options ?? {}));
 

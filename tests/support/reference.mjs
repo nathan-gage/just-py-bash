@@ -54,11 +54,49 @@ function decodeFiles(files) {
   return decoded;
 }
 
-function decodeInitOptions(options) {
+function decodeFs(mod, spec) {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+    throw new Error('Unsupported fs config payload');
+  }
+
+  switch (spec.kind) {
+    case 'in_memory':
+      return new mod.InMemoryFs(decodeFiles(spec.files));
+    case 'overlay':
+      return new mod.OverlayFs({
+        root: spec.root,
+        mountPoint: spec.mountPoint,
+        readOnly: spec.readOnly,
+        maxFileReadSize: spec.maxFileReadSize,
+        allowSymlinks: spec.allowSymlinks,
+      });
+    case 'read_write':
+      return new mod.ReadWriteFs({
+        root: spec.root,
+        maxFileReadSize: spec.maxFileReadSize,
+        allowSymlinks: spec.allowSymlinks,
+      });
+    case 'mountable':
+      return new mod.MountableFs({
+        base: spec.base ? decodeFs(mod, spec.base) : undefined,
+        mounts: Array.isArray(spec.mounts)
+          ? spec.mounts.map((mount) => ({
+              mountPoint: mount.mountPoint,
+              filesystem: decodeFs(mod, mount.filesystem),
+            }))
+          : undefined,
+      });
+    default:
+      throw new Error(`Unknown fs config kind: ${String(spec.kind)}`);
+  }
+}
+
+function decodeInitOptions(mod, options) {
   const decoded = {};
   if (options.files !== undefined) decoded.files = decodeFiles(options.files);
   if (options.env !== undefined) decoded.env = options.env;
   if (options.cwd !== undefined) decoded.cwd = options.cwd;
+  if (options.fs !== undefined) decoded.fs = decodeFs(mod, options.fs);
   if (options.commands !== undefined) decoded.commands = options.commands;
   if (options.python !== undefined) decoded.python = options.python;
   if (options.javascript !== undefined) decoded.javascript = options.javascript;
@@ -113,7 +151,7 @@ async function readStdin() {
 
 const request = JSON.parse(await readStdin());
 const mod = await import(pathToFileURL(request.jsEntry).href);
-const bash = new mod.Bash(decodeInitOptions(request.initOptions ?? {}));
+const bash = new mod.Bash(decodeInitOptions(mod, request.initOptions ?? {}));
 const packageJson = JSON.parse(await readFile(request.packageJson, 'utf8'));
 
 const results = [];
