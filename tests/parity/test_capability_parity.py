@@ -2,15 +2,23 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import pytest
 
-from tests.support.harness import BackendArtifacts, op_exec, public_api, run_differential_scenario
+from tests.support.harness import (
+    BackendArtifacts,
+    op_exec,
+    public_api,
+    run_async_differential_scenario,
+    run_differential_scenario,
+)
 
 pytestmark = pytest.mark.parity
+
+ScenarioRunner = Callable[..., tuple[dict[str, Any], dict[str, Any]]]
 
 
 @pytest.fixture()
@@ -150,7 +158,12 @@ def test_process_info_matches_upstream_and_virtual_proc_files(
 
 
 @pytest.mark.parametrize(
-    ("name", "init_kwargs", "script", "expected_exit_code", "expected_stderr_substring"),
+    "runner",
+    [run_differential_scenario, run_async_differential_scenario],
+    ids=["sync", "async"],
+)
+@pytest.mark.parametrize(
+    ("name", "init_kwargs", "script", "expected_exit_code", "expected_stderr_substring", "raw_script"),
     [
         (
             "loop_iterations",
@@ -158,6 +171,7 @@ def test_process_info_matches_upstream_and_virtual_proc_files(
             "while true; do echo tick; done",
             126,
             "maxLoopIterations",
+            False,
         ),
         (
             "heredoc_size",
@@ -165,6 +179,7 @@ def test_process_info_matches_upstream_and_virtual_proc_files(
             "cat <<'EOF'\nhello\nEOF",
             2,
             "Heredoc size limit exceeded",
+            True,
         ),
         (
             "output_size",
@@ -172,21 +187,68 @@ def test_process_info_matches_upstream_and_virtual_proc_files(
             "printf 'abcdef'",
             126,
             "maxOutputSize",
+            False,
+        ),
+        (
+            "awk_iterations",
+            {"execution_limits": public_api().ExecutionLimits(max_awk_iterations=3)},
+            "awk 'BEGIN { while (1) { } }'",
+            126,
+            "maximum iterations (3)",
+            False,
+        ),
+        (
+            "sed_iterations",
+            {"execution_limits": public_api().ExecutionLimits(max_sed_iterations=5)},
+            "printf 'x\\n' | sed ':a; ba'",
+            126,
+            "maximum iterations (5)",
+            False,
+        ),
+        (
+            "jq_iterations",
+            {"execution_limits": public_api().ExecutionLimits(max_jq_iterations=3)},
+            "echo '0' | jq '[while(true; . + 1)]'",
+            126,
+            "executionLimits.maxJqIterations",
+            False,
+        ),
+        (
+            "sqlite_timeout_ms",
+            {"execution_limits": public_api().ExecutionLimits(max_sqlite_timeout_ms=5)},
+            'sqlite3 :memory: "WITH RECURSIVE cnt(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM cnt WHERE x<100000000) SELECT max(x) FROM cnt;"',
+            1,
+            "5ms limit",
+            False,
+        ),
+        (
+            "js_timeout_ms",
+            {
+                "javascript": True,
+                "execution_limits": public_api().ExecutionLimits(max_js_timeout_ms=25),
+            },
+            "js-exec -c 'while(true){}'",
+            124,
+            "25ms limit",
+            False,
         ),
     ],
     ids=lambda value: value if isinstance(value, str) else None,
 )
-def test_execution_limits_match_upstream_for_shipped_limit_types(
+def test_execution_limits_match_upstream_for_wrapper_exposed_limit_fields(
     name: str,
     init_kwargs: dict[str, Any],
     script: str,
     expected_exit_code: int,
     expected_stderr_substring: str,
+    raw_script: bool,
     backend_artifacts: BackendArtifacts,
+    runner: ScenarioRunner,
 ) -> None:
-    python_result, reference_result = run_differential_scenario(
+    operation = op_exec(script, raw_script=True) if raw_script else op_exec(script)
+    python_result, reference_result = runner(
         init_kwargs=init_kwargs,
-        operations=[op_exec(script, raw_script=True if "EOF" in script else False)],
+        operations=[operation],
         backend_artifacts=backend_artifacts,
     )
 

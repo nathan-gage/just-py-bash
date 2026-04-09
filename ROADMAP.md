@@ -23,7 +23,7 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `86 passed`
+- The current local test count is `99 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 
@@ -68,7 +68,7 @@ That suite currently covers:
 - matching async curated and generated parity suites
 - network parity using local fixtures instead of public internet dependencies
 - `process_info` parity including virtual `/proc` behavior
-- key execution-limit parity
+- key execution-limit parity, including wrapper-focused coverage for loop/heredoc/output plus awk/sed/jq/sqlite/js limit fields
 - filesystem-config parity for overlay, read-write, and mountable configurations
 
 ### Public API and contract tests
@@ -110,11 +110,11 @@ These milestones are already in place:
 
 These should stay wrapper-focused: verify Python-side limit fields, wire translation, and wrapper-vs-upstream parity at the execution-limit boundary. They should not turn into broad correctness tests for upstream awk/sed/jq/sqlite/JS behavior.
 
-- [ ] add targeted parity coverage for `max_awk_iterations`
-- [ ] add targeted parity coverage for `max_sed_iterations`
-- [ ] add targeted parity coverage for `max_jq_iterations`
-- [ ] add targeted parity coverage for `max_sqlite_timeout_ms`
-- [ ] add targeted parity coverage for `max_js_timeout_ms`
+- [x] add targeted parity coverage for `max_awk_iterations`
+- [x] add targeted parity coverage for `max_sed_iterations`
+- [x] add targeted parity coverage for `max_jq_iterations`
+- [x] add targeted parity coverage for `max_sqlite_timeout_ms`
+- [x] add targeted parity coverage for `max_js_timeout_ms`
 
 #### Small correctness follow-ups
 
