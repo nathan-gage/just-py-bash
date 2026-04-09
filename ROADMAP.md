@@ -1,325 +1,229 @@
 # just-py-bash roadmap
 
-This document is the working inventory for the wrapper: what exists today, what is actually covered by automated tests, and what should be improved next.
+This roadmap tracks three things:
 
-## Review scope
+1. what the wrapper already ships
+2. how much confidence we have in that shipped surface
+3. the planned work for reaching fuller upstream parity
 
-This roadmap was prepared by reviewing:
+## Product direction
 
-- `just_py_bash/src/just_bash/`
-- `tests/`
-- `examples/`
-- `README.md`
-- `pyproject.toml`
-- `Makefile`
-- `just_py_bash/tools/build_packaged_runtime.sh`
+The direction for this project is now explicit:
+
+- `just-py-bash` is aiming for **full parity with upstream `just-bash` over time**.
+- That parity target means **all user-facing upstream surfaces**, not just the core session constructor.
+- The primary product is a **native-feeling Python SDK** that preserves upstream semantics.
+- Sync and async Python APIs are both first-class and required wherever the wrapped surface makes sense in Python.
+- When an upstream shape maps cleanly to Python, the wrapper should stay close to upstream naming and behavior.
+- Naming should stay as close to upstream as Python allows: keep class names in upstream-style `PascalCase`, and adapt function names, keyword arguments, and fields to `snake_case` where that improves Python fit without changing semantics.
+- When an upstream shape does not map cleanly to Python, the wrapper should provide a Pythonic adapter that still serializes into upstream behavior.
+- The CLI is **not** a separate product: CLI parity should come from **thin launchers over upstream CLI assets**, not from reimplementing upstream flag parsing in Python.
+- Differential testing against upstream `just-bash` remains the main confidence gate.
 
 ## Current snapshot
 
-Latest local validation after the current filesystem-config expansion work:
-
-```bash
-make all
-```
-
-Result:
-
-- `make all` passes
-- `80 passed`
-
-Coverage is only one signal. For this project, the strongest confidence still comes from the black-box differential tests in `tests/parity/` that compare the Python wrapper against direct upstream `just-bash` execution.
-
-## Confidence legend
-
-- **Strong**: covered by direct public-API tests and/or differential parity tests, often with property-based expansion
-- **Moderate**: covered by focused tests, but only for a narrow slice of the feature
-- **Smoke-only**: one or two happy-path tests exist, but failure modes and edge cases are not well covered
-- **None**: implemented in code but not meaningfully exercised by automated tests
-- **Planned**: not implemented yet
+- `make all` passes locally
+- The current local test count is `80 passed`
+- Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
+- Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 
 ## Capability matrix
 
-| Capability | Implementation status | Test confidence | Where it is covered | Notes |
-|---|---|---:|---|---|
-| Synchronous session API (`Bash`) | Implemented | Strong | `tests/api/test_session_api.py`, `tests/parity/*`, packaging tests | Core public surface works and is exercised end-to-end. |
-| Native async session API (`AsyncBash`) | Implemented | Strong | `tests/api/test_session_api.py`, `tests/parity/test_async_*`, async custom-command contract test | Async now has the same curated + generated differential parity shape as sync. |
-| Long-lived session with shared virtual filesystem across `exec()` calls | Implemented | Strong | API tests + curated parity scenarios | One of the main wrapper guarantees. |
-| Per-`exec()` isolated shell state | Implemented | Strong | Curated parity scenarios | Explicitly exercised via env/cwd shell-state scenarios. |
-| `exec()` options: `env`, `replace_env`, `cwd`, `stdin`, `args`, `raw_script`, `timeout` | Implemented | Strong | Curated parity scenarios + generated transcripts | This is one of the best-tested areas. |
-| Text and bytes file helpers (`read_*`, `write_*`) | Implemented | Strong | API tests + parity tests + generated transcripts | Includes binary round-trips. |
-| Backend version reporting | Implemented | Moderate | API tests + packaging tests | Happy path covered. |
-| Sync custom commands | Implemented | Strong | `tests/contracts/test_custom_commands.py`, property tests | Includes nested exec, pipelines, built-in override, non-zero exits, exception mapping. |
-| Async custom commands | Implemented | Moderate | `tests/contracts/test_custom_commands.py` | Core happy paths covered, but not fuzzed or parity-tested. |
-| Command allowlist (`commands=`) | Implemented | Moderate | Curated parity scenario | Covered, but only lightly. |
-| Execution limits (`ExecutionLimits`) | Implemented | Moderate | `tests/parity/test_capability_parity.py`, curated parity scenarios | Loop, heredoc, and output limits are now covered directly; more breadth is still useful. |
-| Python runtime (`python=True`) | Implemented | Moderate | `tests/contracts/test_optional_runtimes.py`, `tests/contracts/test_distributions.py`, `tests/api/test_cli.py` | Direct happy path, timeout-limit behavior, installed-distribution smoke, and CLI enablement are covered. |
-| JavaScript runtime (`javascript=True` / `JavaScriptConfig`) | Implemented | Moderate | `tests/contracts/test_optional_runtimes.py`, `tests/contracts/test_distributions.py` | Direct happy path and installed-distribution smoke are covered. |
-| Network config (`network=`) | Implemented | Moderate | `tests/parity/test_capability_parity.py` | Local HTTP server parity covers command availability, allow-list behavior, methods, and header transforms. |
-| Virtual process info (`process_info=`) | Implemented | Moderate | `tests/parity/test_capability_parity.py` | Differential tests now assert `$$`, `$PPID`, `$UID`, `/proc/self/status`, and `/proc/self/cmdline`. |
-| Backend override knobs (`node_command`, `js_entry`, `package_json`) | Implemented | Moderate | `tests/contracts/test_backend_overrides.py`, `tests/contracts/test_node_provider.py`, API bridge-failure tests | Explicit args and env-var forms are covered, including `JUST_BASH_NODE`. |
-| `Bash.from_options(...)` / `AsyncBash.from_options(...)` | Implemented | Moderate | `tests/api/test_from_options_and_bridge_failures.py` | Both public constructors are now exercised directly. |
-| Public CLI (`just-py-bash`) | Implemented | Moderate | `tests/api/test_cli.py`, packaging tests | Source-level CLI tests now cover `--cwd`, `--python`, `--timeout`, `--version`, stdin piping, and exit-code propagation. |
-| Packaged wheel runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
-| Packaged sdist runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
-| Packaged runtime for optional Python/JS assets | Implemented by build script | Moderate | `tests/contracts/test_distributions.py` | Installed wheel/sdist tests now verify packaged Python and JavaScript runtime smoke paths. |
-| Init-time fs config objects (`InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, `MountConfig`) | Implemented | Moderate | `tests/api/test_fs_config_api.py`, `tests/parity/test_filesystem_configs.py` | Mirrors upstream constructor shapes for session init; sync and async parity now cover overlay/read-write/mountable behavior. |
-| Low-level fs API surface (`stat`, `readdir`, `mkdir`, `rm`, etc.) | Not implemented | Planned | N/A | Current Python wrapper now supports `fs=` config objects, but still only exposes session helpers plus read/write convenience methods. |
-| Upstream `fetch`, `logger`, `trace`, `defenseInDepth`, `coverage` options | Not implemented | Planned | N/A | No Python equivalents yet. |
-| Upstream transform/plugin/parser/security/sandbox exports | Not implemented | Planned | N/A | Outside current session-focused wrapper scope. |
-
-## What is implemented today
-
-### Public Python API
-
-The package already ships a usable session-oriented wrapper around upstream `just-bash`:
-
-- `Bash` for synchronous code
-- `AsyncBash` for `asyncio`
-- `ExecResult`, `ExecutionLimits`, `JavaScriptConfig`
-- typed network/process-info models
-- init-time fs config objects (`InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, `MountConfig`) plus `fs=` session construction
-- custom command support for sync and async Python callables
-- convenience file helpers (`read_text`, `read_bytes`, `write_text`, `write_bytes`)
-- a minimal `just-py-bash` CLI
-
-### Bridge architecture
-
-The current design is solid and intentionally simple:
-
-- Python owns the public API and validation
-- a dedicated Node worker hosts a real upstream `just-bash` `Bash` instance
-- the worker speaks a small JSON line protocol
-- sync and async Python bridges are separate implementations
-- the package can boot either the repo vendored backend or the packaged backend under `just_py_bash/src/just_bash/_vendor/just-bash`
-
-### Packaging/runtime story
-
-The repo already has a credible packaging story:
-
-- a packaged backend is built into `just_py_bash/src/just_bash/_vendor/just-bash`
-- `just_py_bash/tools/build_packaged_runtime.sh` bundles upstream runtime artifacts, worker files, WASM payloads, and package metadata
-- wheel/sdist installation is tested from isolated virtual environments with no repo checkout
-
-### Testing story
-
-The current suite is already well structured:
-
-- `tests/api/`: public Python API contract tests
-- `tests/parity/`: direct wrapper-vs-upstream differential tests
-- `tests/contracts/`: custom commands, packaging, and optional runtime contracts
-- `tests/support/reference.mjs`: direct Node reference harness
-
-The best-tested areas are:
-
-- basic sync session behavior
-- state persistence vs shell-state isolation
-- file helper round-trips
-- exec option translation
-- sync custom command behavior
-- generated wrapper transcript parity
-- sync and async filesystem-config parity for shipped fs constructors
-
-## What is properly tested today
-
-### Differential parity coverage
-
-The strongest evidence today comes from `tests/parity/`.
-
-Curated scenarios currently cover:
-
-- shell state isolation while filesystem state persists
-- `stdin`, `replace_env`, `cwd`, `args`, and `timeout`
-- binary file round-trips
-- initial files and command allowlists
-- empty-string / empty-list / empty-env transport behavior
-- unicode environment transport plus `raw_script` behavior
-- local-network config parity against a test HTTP server
-- `process_info` parity including virtual `/proc` surfaces
-- targeted execution-limit parity for loop, heredoc, and output limits
-- overlay/read-write/mountable filesystem config parity, including read-only overlays and persistent host writes
-- the same curated corpus through `AsyncBash`
-
-Generated transcripts add randomized coverage for:
-
-- text vs bytes writes
-- text vs bytes reads
-- repeated `exec()` calls
-- environment overrides
-- cwd overrides
-- argument passthrough
-- final session snapshot consistency
-- the same randomized transcript model through `AsyncBash`
+| Capability | Status | Confidence | Main coverage |
+|---|---|---:|---|
+| Core sync session API (`Bash`) | Implemented | Strong | `tests/api/test_session_api.py`, `tests/parity/*`, packaging tests |
+| Core async session API (`AsyncBash`) | Implemented | Strong | `tests/api/test_session_api.py`, `tests/parity/test_async_*`, async custom-command tests |
+| Shared virtual filesystem + isolated per-exec shell state | Implemented | Strong | API tests, curated parity scenarios |
+| `exec()` option mapping (`env`, `cwd`, `stdin`, `args`, `timeout`, etc.) | Implemented | Strong | Curated parity + generated transcripts |
+| File helpers (`read_*`, `write_*`) | Implemented | Strong | API tests, parity tests, generated transcripts |
+| Sync custom commands | Implemented | Strong | `tests/contracts/test_custom_commands.py`, property tests |
+| Async custom commands | Implemented | Moderate | `tests/contracts/test_custom_commands.py` |
+| Command allowlist (`commands=`) | Implemented | Moderate | Curated parity scenario |
+| Execution limits (`ExecutionLimits`) | Implemented | Moderate | `tests/parity/test_capability_parity.py`, curated parity scenarios |
+| Optional Python runtime (`python=True`) | Implemented | Moderate | Optional-runtime tests, distribution tests, CLI tests |
+| Optional JavaScript runtime (`javascript=True` / `JavaScriptConfig`) | Implemented | Moderate | Optional-runtime tests, distribution tests |
+| Network config (`network=`) | Implemented | Moderate | `tests/parity/test_capability_parity.py` |
+| Virtual process info (`process_info=`) | Implemented | Moderate | `tests/parity/test_capability_parity.py` |
+| Backend overrides (`node_command`, `js_entry`, `package_json`) | Implemented | Moderate | Backend override tests, node-provider tests, bridge-failure tests |
+| Alternative constructors (`from_options(...)`) | Implemented | Moderate | `tests/api/test_from_options_and_bridge_failures.py` |
+| Current Python entrypoint CLI (`just-py-bash`) | Implemented | Moderate | `tests/api/test_cli.py`, packaging tests |
+| Upstream CLI parity via delegation | Planned | N/A | Roadmap — CLI parity |
+| Vendored/packaged runtime distribution story | Implemented | Moderate | `tests/contracts/test_distributions.py` |
+| Init-time fs config objects (`fs=`) | Implemented | Moderate | `tests/api/test_fs_config_api.py`, `tests/parity/test_filesystem_configs.py` |
+| Session-bound low-level fs API (`exists`, `stat`, `mkdir`, `readdir`, `rm`, etc.) | Planned | N/A | Roadmap — Filesystem parity |
+| Richer initial file parity (metadata/lazy files) | Planned | N/A | Roadmap — Filesystem parity |
+| Upstream option parity (`fetch`, `logger`, `trace`, `defenseInDepth`, `coverage`) | Planned | N/A | Roadmap — Option parity |
+| Broader upstream transform/plugin/parser/security/sandbox exports | Planned | N/A | Roadmap — Broader export parity |
+
+## What gives confidence today
+
+### Differential parity
+
+`tests/parity/` is the strongest signal because it compares the Python wrapper directly against upstream `just-bash`.
+
+That suite currently covers:
+
+- curated sync scenarios for shell-state isolation and persistent filesystem state
+- generated sync transcripts for repeated session behavior
+- matching async curated and generated parity suites
+- network parity using local fixtures instead of public internet dependencies
+- `process_info` parity including virtual `/proc` behavior
+- key execution-limit parity
+- filesystem-config parity for overlay, read-write, and mountable configurations
 
-### Public contract coverage
+### Public API and contract tests
 
-The public API tests verify:
+The rest of the test suite complements parity coverage with Python-specific guarantees:
+
+- API tests for session lifecycle, result handling, constructors, CLI behavior, and bridge failure paths
+- contract tests for custom commands, backend selection, optional runtimes, and installation/distribution behavior
+- smoke coverage for installed wheel/sdist usage outside a repo checkout
+
+## Completed foundation work
+
+These milestones are already in place:
+
+- [x] core sync `Bash` API
+- [x] core async `AsyncBash` API
+- [x] public API and parity harness structure
+- [x] generated transcript parity for sync and async sessions
+- [x] source-level CLI coverage for the current Python entrypoint
+- [x] backend override and bridge failure-path coverage
+- [x] local-fixture parity for `network` and `process_info`
+- [x] broader execution-limit coverage for key current cases
+- [x] wheel/sdist smoke coverage for optional Python and JavaScript runtimes
+- [x] init-time filesystem config support via `fs=`
+- [x] sync and async parity coverage for `OverlayFs`, `ReadWriteFs`, and `MountableFs`
+
+## Roadmap
+
+### Reliability and confidence
+
+#### Example smoke coverage
 
-- `backend_version`
-- `ExecResult.check()` / `CommandFailedError`
-- session isolation between independent `Bash` instances
-- file helper round-trips
-- idempotent `close()` behavior
-- basic async session behavior
-- `Bash.from_options(...)` and `AsyncBash.from_options(...)`
-- `InMemoryFs` acceptance through `Bash(...)` and `AsyncBash(...)`
-- CLI behavior for `--cwd`, `--python`, `--timeout`, `--version`, stdin piping, and exit-code propagation
-- bridge unhappy paths including malformed worker responses, worker crashes, backend-unavailable cases, and timeout behavior
+- [ ] add smoke tests for `examples/`
+- [ ] run the examples as public-API programs rather than testing private internals
+- [ ] keep examples aligned with the documented SDK surface only
+
+#### Execution-limit breadth
+
+These should stay wrapper-focused: verify Python-side limit fields, wire translation, and wrapper-vs-upstream parity at the execution-limit boundary. They should not turn into broad correctness tests for upstream awk/sed/jq/sqlite/JS behavior.
 
-### Capability contract coverage
+- [ ] add targeted parity coverage for `max_awk_iterations`
+- [ ] add targeted parity coverage for `max_sed_iterations`
+- [ ] add targeted parity coverage for `max_jq_iterations`
+- [ ] add targeted parity coverage for `max_sqlite_timeout_ms`
+- [ ] add targeted parity coverage for `max_js_timeout_ms`
+
+#### Small correctness follow-ups
 
-Contract tests currently verify:
+- [ ] change `Bash.__repr__()` so it no longer performs live bridge I/O
+- [ ] keep backend artifact inference behavior documented and covered
+- [ ] keep README and roadmap aligned with the actual shipped/tested surface
 
-- sync custom commands
-- nested exec from custom commands
-- pipeline participation
-- built-in override behavior
-- non-zero exit-code propagation
-- exception-to-shell-failure mapping
-- async custom commands
-- backend override knobs (`JUST_BASH_NODE`, `JUST_BASH_JS_ENTRY`, `JUST_BASH_PACKAGE_JSON`, explicit args)
-- installed wheel/sdist boot and console-script smoke paths
-- installed wheel/sdist smoke for optional Python and JavaScript runtimes
-- optional Python and JavaScript runtime happy paths plus Python timeout-limit behavior
+### CLI parity
 
-## What needs improvement
+The CLI path is fixed: the Python package should ship thin launchers over upstream CLI assets rather than maintain a separate Python CLI behavior model.
 
-### 1. Finish test coverage for features that already exist
+#### Upstream CLI asset packaging
 
-The biggest recent improvement was expanding coverage for already-shipped features instead of adding a large new API surface.
+- [ ] include upstream `dist/bin/**` assets in the packaged vendored runtime
+- [ ] preserve the upstream `dist/bin/**` relative layout rather than cherry-picking individual CLI chunks
+- [ ] keep CLI entrypoints, chunks, workers, and runtime assets package-relative so upstream path resolution keeps working unchanged
+- [ ] verify the packaged runtime can launch upstream CLI entrypoints from installed wheel/sdist artifacts
 
-Completed recently:
+#### CLI launcher delegation
 
-- local-network parity tests using a test HTTP server
-- `process_info` parity tests for `$$`, `$PPID`, `$UID`, `/proc`, and cmdline behavior
-- backend override knob tests for explicit args and env vars
-- bridge unhappy-path tests for unavailable backends, malformed worker responses, crashes, timeouts, and close-after-failure
-- broader execution-limit tests
-- source-level CLI option tests
-- installed wheel/sdist runtime tests for Python and JavaScript
-- `from_options(...)` tests for both sync and async
-- async curated and generated differential parity harnesses
-- async failure-path tests
-- Python-side fs config classes plus sync/async parity coverage for overlay, read-write, and mountable behavior
+- [ ] change `just-py-bash` to forward argv to upstream `just-bash`
+- [ ] forward stdin/stdout/stderr transparently
+- [ ] forward the exact process exit code transparently
+- [ ] avoid reimplementing upstream CLI flag parsing in Python
 
-Remaining near-term gaps:
+#### Shell launcher parity
 
-- **Examples are documented but not exercised**
-  - Add smoke tests or at least snippet tests for `examples/`.
+- [ ] add a Python package entrypoint for the upstream interactive shell path
+- [ ] delegate that entrypoint to upstream `just-bash-shell`
+- [ ] mirror upstream packaging shape here: because upstream ships `just-bash` and `just-bash-shell` from the main package, ship the corresponding Python launchers from the main Python package as well
+- [ ] keep naming/documentation clear about the Python package binary names versus upstream binary names
 
-- **Execution-limit breadth can still improve**
-  - The most important limits now have coverage, but there is still room to add targeted tests for awk/sed/jq/sqlite/JS-specific limits.
+#### CLI parity tests
 
-- **CLI scope should be clarified explicitly**
-  - We now test the current helper CLI well enough to trust it, but the project should still decide whether that CLI is intentionally minimal or meant to approach upstream CLI parity.
+- [ ] add installed-distribution tests for `-c`
+- [ ] add installed-distribution tests for stdin piping
+- [ ] add installed-distribution tests for `--root`
+- [ ] add installed-distribution tests for `--cwd`
+- [ ] add installed-distribution tests for `--json`
+- [ ] add installed-distribution tests for script-file execution
+- [ ] add installed-distribution smoke for the shell entrypoint
 
-### 2. Address a few specific code-level issues discovered in review
+#### CLI documentation
 
-- **Broken documentation link**
-  - `README.md` previously referenced `docs/wrapping-plan.md`, which did not exist.
-  - This roadmap replaces that missing document.
+- [ ] document that CLI semantics are sourced from upstream `just-bash`
+- [ ] document any Python-package-specific launcher naming clearly
+- [ ] remove Python-specific CLI behavior documentation once delegation is in place
 
-- **`js_entry` package metadata inference was fragile and is now fixed**
-  - `resolve_backend_artifacts()` and the test harness now walk parent directories to find `package.json` when only `js_entry` is supplied.
-  - That makes `dist/bundle/index.js` overrides work without requiring an explicit `package_json` argument.
+### Filesystem parity
 
-- **`Bash.__repr__()` performs live bridge I/O**
-  - Sync `Bash.__repr__()` calls `get_cwd()` for open sessions.
-  - This is surprising for `repr()` and can fail if the worker is unhealthy.
-  - Prefer the non-I/O style already used by `AsyncBash.__repr__()`.
+The first filesystem milestone is complete. The next step is to expose a larger Python-facing filesystem surface while preserving upstream semantics.
 
-- **Public constructors were unevenly exercised and are now covered**
-  - `from_options(...)` is now exercised for both sync and async APIs.
+#### Session-bound fs API
 
-### 3. Expand the current session-oriented API carefully
+- [ ] add a session-bound fs API on top of upstream filesystem operations
+- [ ] implement `exists`
+- [ ] implement `stat`
+- [ ] implement `mkdir`
+- [ ] implement `readdir`
+- [ ] implement `rm`
+- [ ] implement `cp`
+- [ ] implement `mv`
+- [ ] implement `chmod`
+- [ ] implement `readlink`
+- [ ] implement `realpath`
 
-Before chasing full upstream parity, there is room to improve the current Pythonic wrapper surface itself.
+#### Filesystem coverage
 
-Potential additions:
+- [ ] add parity coverage for cross-mount operations
+- [ ] add parity coverage for read-only overlay behavior
+- [ ] add parity coverage for host-persistent write roots
+- [ ] add parity coverage for symlink behavior
+- [ ] add parity coverage for permission and path-resolution failures
 
-- richer file initialization parity with upstream (`FileInit`, lazy file providers)
-- more session helpers beyond raw text/bytes read/write if they stay useful and Pythonic
-- clearer docs for packaged-runtime refresh flow and release process
-- clearer statement of CLI scope: helper CLI vs near-upstream CLI parity
+#### Richer initialization parity
 
-### 4. Plan the next upstream parity work
+- [ ] add metadata-aware initial file support
+- [ ] add lazy file initialization support
+- [ ] document the exact precedence and interaction of `files=` and `fs=`
+- [ ] add contract/parity tests for richer initialization behavior
 
-The largest construction-time parity gap is no longer `fs=` support; that milestone is now in place. The next question is how far the Python wrapper should go beyond init-time filesystem config objects.
+### Option parity
 
-Recommended order:
+Expand the remaining upstream construction/configuration surfaces with Pythonic wrappers that serialize directly into upstream behavior.
 
-1. **Decide whether a session-bound fs proxy belongs in the public API**
-   - `stat`, `exists`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, etc.
-   - This is a much larger bridge/API expansion than serialized init-time config objects.
+- [ ] add Python-facing support for upstream `fetch`
+- [ ] add Python-facing support for upstream `logger`
+- [ ] add Python-facing support for upstream `trace`
+- [ ] add Python-facing support for upstream `defenseInDepth`
+- [ ] add Python-facing support for upstream `coverage`
+- [ ] add parity or contract coverage for each added option
 
-2. **Improve richer file-initialization parity if users need it**
-   - upstream-style metadata/lazy file initialization
-   - clearer semantics where `files=` and `fs=` overlap
+### Broader export parity
 
-3. **Only then consider lower-priority upstream APIs**
-   - `fetch`
-   - `logger`
-   - `trace`
-   - `defenseInDepth`
-   - `coverage`
-   - transform plugins
-   - parser/sandbox/security exports
+After the session API, CLI, filesystem API, and construction options are in place, expand the remaining user-facing upstream exports.
 
-## Suggested phased roadmap
+- [ ] add Python-facing wrappers for upstream transform/plugin surfaces
+- [ ] add Python-facing wrappers for parser/security/sandbox surfaces
+- [ ] keep naming close to upstream, using Python `snake_case` for function/field-style surfaces and upstream-style `PascalCase` for classes
+- [ ] add focused examples for each adopted surface
+- [ ] add contract or parity coverage for each adopted surface
 
-### Phase 0: Documentation and correctness
+## Near-term order
 
-- [x] Add a real roadmap document
-- [x] Point README at it
-- [x] Fix `js_entry` / `package_json` inference for bundle paths
+The current recommended order is:
 
-### Phase 1: Test the features we already ship
+1. confidence and maintenance work
+2. CLI parity through thin delegation
+3. filesystem parity beyond init-time `fs=`
+4. option parity
+5. broader export parity
 
-- [x] network tests using a local HTTP server
-- [x] `process_info` tests
-- [x] backend override knob tests
-- [x] bridge failure / timeout tests
-- [x] broader execution-limit tests
-- [x] CLI option tests
-- [x] installed-wheel/sdist tests for Python and JavaScript runtimes
-- [x] `from_options(...)` tests
-- [ ] example smoke tests
-
-### Phase 2: Bring async confidence up to sync confidence
-
-- [x] async differential parity harness
-- [x] async failure-path tests
-- [ ] async packaging smoke tests if useful
-
-### Phase 3: Close the largest upstream parity gap
-
-- [x] Python-side fs config classes
-- [x] `Bash(fs=...)` and `AsyncBash(fs=...)`
-- [x] tests for overlay/read-write/mountable behavior
-- [ ] decide whether low-level fs proxies belong in the public API
-
-### Phase 4: Optional advanced parity
-
-- [ ] richer initial-file parity (metadata/lazy files)
-- [ ] selected upstream callback/plugin surfaces as justified by user demand
-- [ ] decide whether `Sandbox`/parser/transform exports are in or out of scope
-
-## Bottom line
-
-The project already has a solid and useful core:
-
-- the session-oriented wrapper works
-- the sync API is well covered
-- the custom-command story is good
-- the packaging story is real
-- parity testing against upstream is already the backbone of confidence
-
-The recent expansion work closed most of the highest-value confidence gaps for the current API surface and added the first filesystem-construction milestone via upstream-style `fs=` config objects.
-
-What remains is now clearer:
-
-- example smoke coverage
-- a few deeper execution-limit cases
-- an explicit decision about long-term CLI scope
-- a decision about whether low-level fs proxy methods belong in the Python API
-
-With those confidence gaps mostly addressed, the next major roadmap question is no longer whether to support `fs=` at all, but whether to go further and expose a larger session-bound filesystem API.
+That ordering is only a sequencing guide. The roadmap itself is organized by parity area so the desired end state stays clear.
