@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from asyncio.subprocess import PIPE
 from collections import deque
@@ -15,9 +16,11 @@ from ._bridge_protocol import (
     BridgeOperation,
     parse_backend_error,
     parse_custom_command_event,
+    parse_lazy_file_event,
     parse_worker_message,
     parse_worker_response,
 )
+from ._codec import encode_file_value
 from ._custom_commands import (
     AsyncCustomCommandContext,
     AsyncCustomCommandHandlers,
@@ -26,22 +29,37 @@ from ._custom_commands import (
     invoke_async_custom_command,
 )
 from ._exceptions import BackendError, BackendUnavailableError, BridgeError, BridgeTimeoutError
+from ._fs import LazyFileProvider
 from ._types import (
     BytesPayload,
+    ChmodRequestPayload,
+    CpRequestPayload,
     CustomCommandCompleteRequestPayload,
     CustomCommandEvent,
     CustomCommandExecRequestPayload,
     ExecRequestPayload,
     ExecResultWire,
+    FsStatWire,
     InfoResponse,
     InitOptionsWire,
     InitRequestPayload,
     InitResponse,
+    LazyFileCompleteRequestPayload,
+    LazyFileEvent,
+    MkdirRequestPayload,
+    PathPairRequestPayload,
     PathRequestPayload,
+    RmRequestPayload,
     WorkerResponse,
     WriteBytesRequestPayload,
     WriteTextRequestPayload,
 )
+
+
+def _coerce_lazy_file_content(value: object) -> str | bytes:
+    if not isinstance(value, (str, bytes)):
+        raise TypeError("Lazy file providers must return str, bytes, or an awaitable of either")
+    return value
 
 
 class AsyncNodeBridge:
@@ -54,6 +72,7 @@ class AsyncNodeBridge:
     _next_id: Iterator[int]
     _pending: dict[int, asyncio.Future[WorkerResponse]]
     _custom_commands: dict[str, CustomCommandHandler]
+    _lazy_file_providers: dict[str, LazyFileProvider]
     _custom_command_tasks: set[asyncio.Task[None]]
     _proc: asyncio.subprocess.Process
     _stdout_task: asyncio.Task[None]
@@ -69,6 +88,7 @@ class AsyncNodeBridge:
         *,
         init_options: InitOptionsWire,
         custom_commands: AsyncCustomCommandHandlers | None = None,
+        lazy_file_providers: Mapping[str, LazyFileProvider] | None = None,
         node_command: Sequence[str] | None = None,
         js_entry: str | None = None,
         package_json: str | None = None,
@@ -83,6 +103,7 @@ class AsyncNodeBridge:
         self._next_id = count(1)
         self._pending = {}
         self._custom_commands = dict(custom_commands or {})
+        self._lazy_file_providers = dict(lazy_file_providers or {})
         self._custom_command_tasks = set()
 
         command = [*resolve_node_command(node_command), str(write_worker_file())]
@@ -196,6 +217,105 @@ class AsyncNodeBridge:
         self,
         op: Literal["write_bytes"],
         payload: WriteBytesRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["exists"],
+        payload: PathRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> bool: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["stat"],
+        payload: PathRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> FsStatWire: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["mkdir"],
+        payload: MkdirRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["readdir"],
+        payload: PathRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> list[str]: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["rm"],
+        payload: RmRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["cp"],
+        payload: CpRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["mv"],
+        payload: PathPairRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["chmod"],
+        payload: ChmodRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["readlink"],
+        payload: PathRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> str: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["realpath"],
+        payload: PathRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> str: ...
+
+    @overload
+    async def request(
+        self,
+        op: Literal["lazy_file_complete"],
+        payload: LazyFileCompleteRequestPayload,
         *,
         timeout: float | None = None,
     ) -> None: ...
@@ -337,8 +457,12 @@ class AsyncNodeBridge:
             try:
                 message = parse_worker_message(line.decode("utf-8", errors="replace"))
                 if message.get("type") == "custom_command":
-                    event = parse_custom_command_event(message)
-                    self._dispatch_custom_command(event)
+                    custom_command_event = parse_custom_command_event(message)
+                    self._dispatch_custom_command(custom_command_event)
+                    continue
+                if message.get("type") == "lazy_file":
+                    lazy_file_event = parse_lazy_file_event(message)
+                    self._dispatch_lazy_file(lazy_file_event)
                     continue
                 response = parse_worker_response(message)
             except BridgeError as exc:
@@ -408,6 +532,47 @@ class AsyncNodeBridge:
         for response_future in pending:
             if not response_future.done():
                 response_future.set_exception(error)
+
+    def _dispatch_lazy_file(self, event: LazyFileEvent) -> None:
+        task = asyncio.create_task(
+            self._handle_lazy_file(event),
+            name=f"just-py-bash-lazy-file-{event['providerName']}",
+        )
+        self._custom_command_tasks.add(task)
+        task.add_done_callback(self._custom_command_tasks.discard)
+
+    async def _handle_lazy_file(self, event: LazyFileEvent) -> None:
+        provider = self._lazy_file_providers.get(event["providerName"])
+        if provider is None:
+            completion_payload: LazyFileCompleteRequestPayload = {
+                "invocationId": event["invocationId"],
+                "error": {"message": f"Unknown lazy file provider: {event['providerName']}"},
+            }
+        else:
+            try:
+                raw_content: object = provider()
+                if inspect.isawaitable(raw_content):
+                    content = _coerce_lazy_file_content(await raw_content)
+                else:
+                    content = _coerce_lazy_file_content(raw_content)
+                completion_payload = {
+                    "invocationId": event["invocationId"],
+                    "content": encode_file_value(content),
+                }
+            except Exception as exc:  # pragma: no cover - exercised via public api tests
+                completion_payload = {
+                    "invocationId": event["invocationId"],
+                    "error": {"type": type(exc).__name__, "message": str(exc)},
+                }
+
+        try:
+            await self.request(
+                "lazy_file_complete",
+                completion_payload,
+                timeout=DEFAULT_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            await self.close()
 
     def _ensure_open(self) -> None:
         if self._closed:

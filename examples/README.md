@@ -33,7 +33,7 @@ uv run --with-editable ./just_py_bash python examples/network_access.py
 
 ## Notes
 
-- The Python wrapper now exposes upstream-style filesystem config objects such as `OverlayFs`, `ReadWriteFs`, and `MountableFs`, but the current example set is still centered on the session-oriented API.
+- The Python wrapper now exposes upstream-style filesystem config objects such as `OverlayFs`, `ReadWriteFs`, and `MountableFs`, richer initial file helpers like `FileInit` / `LazyFile`, and a session-bound `bash.fs` API, but the current example set is still centered on the higher-level session-oriented API.
 - The async examples use the native-async `AsyncBash` bridge, not thread offloading.
 - The network example is intentionally separate because it depends on live internet access.
 - The network example uses `http://example.com` so it remains reliable even in environments where Node's HTTPS certificate store is restricted.
