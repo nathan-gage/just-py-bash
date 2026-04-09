@@ -194,6 +194,12 @@ def test_session_fs_read_only_overlay_failures_match_upstream(
     )
 
     assert python_result == reference_result
+    if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        # Keep enforcing wrapper-vs-reference parity on Windows, but avoid
+        # asserting concrete host-backed overlay semantics that upstream does
+        # not currently deliver consistently there.
+        return
+
     assert python_result["results"][1]["value"] is True
     assert python_result["results"][2]["value"]["isFile"] is True
     for index in (3, 4, 5, 6):
@@ -238,9 +244,14 @@ def test_session_fs_read_write_root_operations_match_upstream(
         reference_result,
         stat_indices={1},
     )
-    assert python_result["results"][1]["value"]["isFile"] is True
     if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        # As with the older filesystem-config parity suite, preserve the
+        # wrapper-vs-reference check on Windows but do not require specific
+        # host-backed read/write semantics that upstream itself does not hold
+        # stable there yet.
         return
+
+    assert python_result["results"][1]["value"]["isFile"] is True
 
     assert python_result["results"][4]["value"] == "created\n"
     assert python_result["results"][6]["value"] is False
