@@ -11,6 +11,7 @@ let bash = null;
 let backendVersion = null;
 let nextInvocationId = 1;
 const pendingCustomCommands = new Map();
+const pendingLazyFiles = new Map();
 
 function respond(id, ok, payload) {
   const body = ok
@@ -31,6 +32,17 @@ function emitCustomCommandInvocation(name, args, ctx) {
         env: Object.fromEntries(ctx.env),
         stdin: ctx.stdin,
       },
+    })}\n`,
+  );
+  return nextInvocationId++;
+}
+
+function emitLazyFileInvocation(providerName) {
+  process.stdout.write(
+    `${JSON.stringify({
+      type: 'lazy_file',
+      invocationId: nextInvocationId,
+      providerName,
     })}\n`,
   );
   return nextInvocationId++;
@@ -71,6 +83,39 @@ function decodeFileContent(value) {
   throw new Error('Unsupported file content payload');
 }
 
+function decodeInitialFileValue(value) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof value.kind === 'string'
+  ) {
+    switch (value.kind) {
+      case 'file_init': {
+        const decoded = {
+          content: decodeFileContent(value.content),
+        };
+        if (value.mode !== undefined) decoded.mode = value.mode;
+        if (value.mtimeMs !== undefined) decoded.mtime = new Date(value.mtimeMs);
+        return decoded;
+      }
+      case 'lazy_static':
+        return async () => decodeFileContent(value.content);
+      case 'lazy_callback':
+        return async () => {
+          const invocationId = emitLazyFileInvocation(value.providerName);
+          return await new Promise((resolve, reject) => {
+            pendingLazyFiles.set(invocationId, { resolve, reject });
+          });
+        };
+      default:
+        throw new Error(`Unsupported initial file payload kind: ${String(value.kind)}`);
+    }
+  }
+
+  return decodeFileContent(value);
+}
+
 function decodeFiles(files) {
   if (!files) {
     return undefined;
@@ -78,7 +123,7 @@ function decodeFiles(files) {
 
   const decoded = {};
   for (const [path, value] of Object.entries(files)) {
-    decoded[path] = decodeFileContent(value);
+    decoded[path] = decodeInitialFileValue(value);
   }
   return decoded;
 }
@@ -182,6 +227,26 @@ function ensureInitialized() {
   }
 }
 
+function resolveSessionPath(path) {
+  return bash.fs.resolvePath(bash.getCwd(), path);
+}
+
+function normalizeFsStat(stat) {
+  return {
+    isFile: Boolean(stat?.isFile),
+    isDirectory: Boolean(stat?.isDirectory),
+    isSymbolicLink: Boolean(stat?.isSymbolicLink),
+    mode: Number.isInteger(stat?.mode) ? stat.mode : 0,
+    size: Number.isInteger(stat?.size) ? stat.size : 0,
+    mtimeMs:
+      stat?.mtime instanceof Date
+        ? stat.mtime.getTime()
+        : Number.isFinite(stat?.mtime?.valueOf?.())
+          ? Number(stat.mtime.valueOf())
+          : 0,
+  };
+}
+
 async function runExec(executor, script, options) {
   const timeoutMs = options?.timeoutMs;
   const execOptions = { ...options };
@@ -244,6 +309,26 @@ function handleCustomCommandComplete(message) {
   return null;
 }
 
+function handleLazyFileComplete(message) {
+  const pending = pendingLazyFiles.get(message.invocationId);
+  if (!pending) {
+    throw new Error(`Unknown lazy file invocation: ${message.invocationId}`);
+  }
+
+  pendingLazyFiles.delete(message.invocationId);
+  if (message.error) {
+    const error = new Error(message.error.message ?? 'Lazy file provider failed');
+    if (typeof message.error.type === 'string' && message.error.type) {
+      error.name = message.error.type;
+    }
+    pending.reject(error);
+    return null;
+  }
+
+  pending.resolve(decodeFileContent(message.content));
+  return null;
+}
+
 async function handleMessage(message) {
   switch (message.op) {
     case 'init': {
@@ -291,6 +376,11 @@ async function handleMessage(message) {
       return handleCustomCommandComplete(message);
     }
 
+    case 'lazy_file_complete': {
+      ensureInitialized();
+      return handleLazyFileComplete(message);
+    }
+
     case 'read_text': {
       ensureInitialized();
       return await bash.readFile(message.path);
@@ -298,9 +388,7 @@ async function handleMessage(message) {
 
     case 'read_bytes': {
       ensureInitialized();
-      const buffer = await bash.fs.readFileBuffer(
-        bash.fs.resolvePath(bash.getCwd(), message.path),
-      );
+      const buffer = await bash.fs.readFileBuffer(resolveSessionPath(message.path));
       return encodeBytes(buffer);
     }
 
@@ -314,6 +402,68 @@ async function handleMessage(message) {
       ensureInitialized();
       await bash.writeFile(message.path, decodeBytes(message.content));
       return null;
+    }
+
+    case 'exists': {
+      ensureInitialized();
+      return await bash.fs.exists(resolveSessionPath(message.path));
+    }
+
+    case 'stat': {
+      ensureInitialized();
+      return normalizeFsStat(await bash.fs.stat(resolveSessionPath(message.path)));
+    }
+
+    case 'mkdir': {
+      ensureInitialized();
+      await bash.fs.mkdir(resolveSessionPath(message.path), {
+        recursive: message.recursive,
+      });
+      return null;
+    }
+
+    case 'readdir': {
+      ensureInitialized();
+      return await bash.fs.readdir(resolveSessionPath(message.path));
+    }
+
+    case 'rm': {
+      ensureInitialized();
+      await bash.fs.rm(resolveSessionPath(message.path), {
+        recursive: message.recursive,
+        force: message.force,
+      });
+      return null;
+    }
+
+    case 'cp': {
+      ensureInitialized();
+      await bash.fs.cp(resolveSessionPath(message.src), resolveSessionPath(message.dest), {
+        recursive: message.recursive,
+      });
+      return null;
+    }
+
+    case 'mv': {
+      ensureInitialized();
+      await bash.fs.mv(resolveSessionPath(message.src), resolveSessionPath(message.dest));
+      return null;
+    }
+
+    case 'chmod': {
+      ensureInitialized();
+      await bash.fs.chmod(resolveSessionPath(message.path), message.mode);
+      return null;
+    }
+
+    case 'readlink': {
+      ensureInitialized();
+      return await bash.fs.readlink(resolveSessionPath(message.path));
+    }
+
+    case 'realpath': {
+      ensureInitialized();
+      return await bash.fs.realpath(resolveSessionPath(message.path));
     }
 
     case 'get_env': {

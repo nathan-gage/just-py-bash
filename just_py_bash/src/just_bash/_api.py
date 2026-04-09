@@ -5,12 +5,12 @@ from collections.abc import Mapping, Sequence
 from typing import Self
 
 from ._bridge import NodeBridge
-from ._codec import decode_bytes_payload, encode_file_value
 from ._custom_commands import CustomCommands
-from ._fs import FileSystemConfig
+from ._fs import FileSystemConfig, InitialFileValue
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._options import BashOptions, ExecOptions
-from ._types import FileValue, NetworkConfig, ProcessInfo
+from ._session_fs import SessionFs
+from ._types import NetworkConfig, ProcessInfo
 
 
 class Bash:
@@ -27,7 +27,7 @@ class Bash:
     def __init__(
         self,
         *,
-        files: Mapping[str, FileValue] | None = None,
+        files: Mapping[str, InitialFileValue] | None = None,
         env: Mapping[str, str] | None = None,
         cwd: str | None = None,
         fs: FileSystemConfig | None = None,
@@ -87,13 +87,16 @@ class Bash:
         js_entry: str | os.PathLike[str] | None,
         package_json: str | os.PathLike[str] | None,
     ) -> None:
+        init_options, lazy_file_providers = options.to_bridge_init()
         self._bridge = NodeBridge(
-            init_options=options.to_wire(),
+            init_options=init_options,
             custom_commands=options.custom_commands,
+            lazy_file_providers=lazy_file_providers,
             node_command=node_command,
             js_entry=js_entry,
             package_json=package_json,
         )
+        self.fs = SessionFs(self._bridge)
 
     @property
     def backend_version(self) -> str | None:
@@ -148,20 +151,16 @@ class Bash:
         return ExecResult.from_wire(payload)
 
     def read_text(self, path: str) -> str:
-        return self._bridge.request("read_text", {"path": path})
+        return self.fs.read_text(path)
 
     def read_bytes(self, path: str) -> bytes:
-        payload = self._bridge.request("read_bytes", {"path": path})
-        return decode_bytes_payload(payload)
+        return self.fs.read_bytes(path)
 
     def write_text(self, path: str, content: str) -> None:
-        self._bridge.request("write_text", {"path": path, "content": content})
+        self.fs.write_text(path, content)
 
     def write_bytes(self, path: str, content: bytes) -> None:
-        self._bridge.request(
-            "write_bytes",
-            {"path": path, "content": encode_file_value(content)},
-        )
+        self.fs.write_bytes(path, content)
 
     def get_env(self) -> dict[str, str]:
         return dict(self._bridge.request("get_env"))

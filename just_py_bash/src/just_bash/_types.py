@@ -18,6 +18,26 @@ class BytesPayload(TypedDict):
 EncodedFileValue: TypeAlias = str | BytesPayload
 
 
+class FileInitWire(TypedDict, total=False):
+    kind: Literal["file_init"]
+    content: EncodedFileValue
+    mode: int
+    mtimeMs: int
+
+
+class LazyStaticFileWire(TypedDict):
+    kind: Literal["lazy_static"]
+    content: EncodedFileValue
+
+
+class LazyCallbackFileWire(TypedDict):
+    kind: Literal["lazy_callback"]
+    providerName: str
+
+
+InitialFileValueWire: TypeAlias = EncodedFileValue | FileInitWire | LazyStaticFileWire | LazyCallbackFileWire
+
+
 class RequestTransform(TypedDict):
     """Header overrides applied at the fetch boundary.
 
@@ -80,7 +100,7 @@ class JavaScriptConfigWire(TypedDict, total=False):
 
 class InMemoryFsWire(TypedDict, total=False):
     kind: Literal["in_memory"]
-    files: Mapping[str, EncodedFileValue]
+    files: Mapping[str, InitialFileValueWire]
 
 
 class OverlayFsWire(TypedDict, total=False):
@@ -114,7 +134,7 @@ FsConfigWire: TypeAlias = InMemoryFsWire | OverlayFsWire | ReadWriteFsWire | Mou
 
 
 class InitOptionsWire(TypedDict, total=False):
-    files: Mapping[str, EncodedFileValue]
+    files: Mapping[str, InitialFileValueWire]
     env: Mapping[str, str]
     cwd: str
     fs: FsConfigWire
@@ -169,6 +189,33 @@ class PathRequestPayload(TypedDict):
     path: str
 
 
+class PathPairRequestPayload(TypedDict):
+    src: str
+    dest: str
+
+
+class MkdirRequestPayload(TypedDict, total=False):
+    path: str
+    recursive: bool
+
+
+class RmRequestPayload(TypedDict, total=False):
+    path: str
+    recursive: bool
+    force: bool
+
+
+class CpRequestPayload(TypedDict, total=False):
+    src: str
+    dest: str
+    recursive: bool
+
+
+class ChmodRequestPayload(TypedDict):
+    path: str
+    mode: int
+
+
 class WriteTextRequestPayload(TypedDict):
     path: str
     content: str
@@ -203,12 +250,33 @@ class CustomCommandEvent(TypedDict):
     context: CustomCommandContextPayload
 
 
+class LazyFileEvent(TypedDict):
+    type: Literal["lazy_file"]
+    invocationId: int
+    providerName: str
+
+
+class LazyFileCompleteRequestPayload(TypedDict, total=False):
+    invocationId: int
+    content: EncodedFileValue
+    error: CustomCommandErrorPayload
+
+
 class ExecResultWire(TypedDict, total=False):
     stdout: str
     stderr: str
     exitCode: int
     env: dict[str, str]
     metadata: dict[str, object] | None
+
+
+class FsStatWire(TypedDict):
+    isFile: bool
+    isDirectory: bool
+    isSymbolicLink: bool
+    mode: int
+    size: int
+    mtimeMs: int
 
 
 class WorkerSuccessResponse(TypedDict):

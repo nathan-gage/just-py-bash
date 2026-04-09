@@ -3,16 +3,17 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Mapping, Sequence
-from typing import Self
+from typing import Any, Self, cast
 
 from ._async_bridge import AsyncNodeBridge
-from ._codec import decode_bytes_payload, encode_file_value
+from ._bridge_protocol import BridgeOperation
 from ._custom_commands import AsyncCustomCommands
 from ._exceptions import BridgeError
-from ._fs import FileSystemConfig
+from ._fs import FileSystemConfig, InitialFileValue
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._options import BashOptions, ExecOptions
-from ._types import FileValue, NetworkConfig, ProcessInfo
+from ._session_fs import AsyncSessionFs
+from ._types import NetworkConfig, ProcessInfo
 
 
 class AsyncBash:
@@ -26,7 +27,7 @@ class AsyncBash:
     def __init__(
         self,
         *,
-        files: Mapping[str, FileValue] | None = None,
+        files: Mapping[str, InitialFileValue] | None = None,
         env: Mapping[str, str] | None = None,
         cwd: str | None = None,
         fs: FileSystemConfig | None = None,
@@ -61,6 +62,7 @@ class AsyncBash:
         self._bridge: AsyncNodeBridge | None = None
         self._closed = False
         self._call_lock: asyncio.Lock | None = None
+        self.fs = AsyncSessionFs(self)
 
     @classmethod
     def from_options(
@@ -80,6 +82,7 @@ class AsyncBash:
         self._bridge = None
         self._closed = False
         self._call_lock = None
+        self.fs = AsyncSessionFs(self)
         return self
 
     @property
@@ -119,9 +122,11 @@ class AsyncBash:
         if self._closed:
             raise BridgeError("just-bash bridge is closed")
 
+        init_options, lazy_file_providers = self._options.to_bridge_init()
         bridge = await AsyncNodeBridge.open(
-            init_options=self._options.to_wire(),
+            init_options=init_options,
             custom_commands=self._custom_commands,
+            lazy_file_providers=lazy_file_providers,
             node_command=self._node_command,
             js_entry=None if self._js_entry is None else str(self._js_entry),
             package_json=None if self._package_json is None else str(self._package_json),
@@ -139,6 +144,11 @@ class AsyncBash:
             self._bridge = None
             self._closed = True
             await bridge.close()
+
+    async def bridge_request(self, op: BridgeOperation, payload: Mapping[str, object]) -> object:
+        async with self._lock():
+            bridge = await self._ensure_bridge_open_locked()
+            return cast(object, await bridge.request(cast(Any, op), cast(Any, payload)))
 
     async def exec(
         self,
@@ -179,28 +189,16 @@ class AsyncBash:
         return ExecResult.from_wire(payload)
 
     async def read_text(self, path: str) -> str:
-        async with self._lock():
-            bridge = await self._ensure_bridge_open_locked()
-            return await bridge.request("read_text", {"path": path})
+        return await self.fs.read_text(path)
 
     async def read_bytes(self, path: str) -> bytes:
-        async with self._lock():
-            bridge = await self._ensure_bridge_open_locked()
-            payload = await bridge.request("read_bytes", {"path": path})
-        return decode_bytes_payload(payload)
+        return await self.fs.read_bytes(path)
 
     async def write_text(self, path: str, content: str) -> None:
-        async with self._lock():
-            bridge = await self._ensure_bridge_open_locked()
-            await bridge.request("write_text", {"path": path, "content": content})
+        await self.fs.write_text(path, content)
 
     async def write_bytes(self, path: str, content: bytes) -> None:
-        async with self._lock():
-            bridge = await self._ensure_bridge_open_locked()
-            await bridge.request(
-                "write_bytes",
-                {"path": path, "content": encode_file_value(content)},
-            )
+        await self.fs.write_bytes(path, content)
 
     async def get_env(self) -> dict[str, str]:
         async with self._lock():

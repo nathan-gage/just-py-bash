@@ -23,9 +23,11 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `100 passed`
+- The current local test count is `136 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
+- The session-bound filesystem API is now implemented for the core upstream filesystem operations
+- Richer initial file parity is now implemented via `FileInit(...)` and `LazyFile(...)`, including differential coverage for callable lazy providers
 
 ## Capability matrix
 
@@ -49,9 +51,9 @@ The direction for this project is now explicit:
 | Current Python entrypoint CLI (`just-py-bash`) | Implemented | Moderate | `tests/api/test_cli.py`, packaging tests |
 | Upstream CLI parity via delegation | Planned | N/A | Roadmap — CLI parity |
 | Vendored/packaged runtime distribution story | Implemented | Moderate | `tests/contracts/test_distributions.py` |
-| Init-time fs config objects (`fs=`) | Implemented | Moderate | `tests/api/test_fs_config_api.py`, `tests/parity/test_filesystem_configs.py` |
-| Session-bound low-level fs API (`exists`, `stat`, `mkdir`, `readdir`, `rm`, etc.) | Planned | N/A | Roadmap — Filesystem parity |
-| Richer initial file parity (metadata/lazy files) | Planned | N/A | Roadmap — Filesystem parity |
+| Init-time fs config objects (`fs=`) | Implemented | Strong | `tests/api/test_fs_config_api.py`, `tests/parity/test_filesystem_configs.py` |
+| Session-bound low-level fs API (`exists`, `stat`, `mkdir`, `readdir`, `rm`, etc.) | Implemented | Strong | `tests/api/test_filesystem_session_api.py`, `tests/parity/test_session_fs_api.py`, `tests/contracts/test_distributions.py` |
+| Richer initial file parity (`FileInit`, `LazyFile`) | Implemented | Strong | `tests/api/test_filesystem_session_api.py`, `tests/parity/test_session_fs_api.py`, `tests/api/test_fs_config_api.py`, `tests/contracts/test_distributions.py` |
 | Upstream option parity (`fetch`, `logger`, `trace`, `defenseInDepth`, `coverage`) | Planned | N/A | Roadmap — Option parity |
 | Broader upstream transform/plugin/parser/security/sandbox exports | Planned | N/A | Roadmap — Broader export parity |
 
@@ -70,6 +72,8 @@ That suite currently covers:
 - `process_info` parity including virtual `/proc` behavior
 - key execution-limit parity, including wrapper-focused coverage for loop/heredoc/output plus awk/sed/jq/sqlite/js limit fields
 - filesystem-config parity for overlay, read-write, and mountable configurations
+- session-fs parity for core operations, symlinks, cross-mount copies, read-only overlays, host-persistent write roots, and path failures
+- richer initial file parity for metadata-aware files plus static and callable lazy files
 
 ### Public API and contract tests
 
@@ -94,6 +98,10 @@ These milestones are already in place:
 - [x] wheel/sdist smoke coverage for optional Python and JavaScript runtimes
 - [x] init-time filesystem config support via `fs=`
 - [x] sync and async parity coverage for `OverlayFs`, `ReadWriteFs`, and `MountableFs`
+- [x] session-bound filesystem API via `bash.fs` / `async_bash.fs`
+- [x] richer initial file support via `FileInit(...)` and `LazyFile(...)`
+- [x] sync and async parity coverage for core session-fs operations
+- [x] differential parity coverage for callable lazy files
 - [x] repo-root smoke coverage for the shipped non-network examples
 
 ## Roadmap
@@ -165,36 +173,39 @@ The CLI path is fixed: the Python package should ship thin launchers over upstre
 
 ### Filesystem parity
 
-The first filesystem milestone is complete. The next step is to expose a larger Python-facing filesystem surface while preserving upstream semantics.
+The filesystem-parity milestone is now in place for the current Python session surface.
+
+That milestone is intentionally scoped to the session-facing API. It does **not** yet claim that every upstream `IFileSystem` method is exposed in Python; lower-level methods such as `appendFile`, `symlink`, `link`, `lstat`, `utimes`, and `readdirWithFileTypes` remain outside the current Python surface unless and until they get a clear Python-facing design plus parity coverage.
 
 #### Session-bound fs API
 
-- [ ] add a session-bound fs API on top of upstream filesystem operations
-- [ ] implement `exists`
-- [ ] implement `stat`
-- [ ] implement `mkdir`
-- [ ] implement `readdir`
-- [ ] implement `rm`
-- [ ] implement `cp`
-- [ ] implement `mv`
-- [ ] implement `chmod`
-- [ ] implement `readlink`
-- [ ] implement `realpath`
+- [x] add a session-bound fs API on top of upstream filesystem operations
+- [x] implement `exists`
+- [x] implement `stat`
+- [x] implement `mkdir`
+- [x] implement `readdir`
+- [x] implement `rm`
+- [x] implement `cp`
+- [x] implement `mv`
+- [x] implement `chmod`
+- [x] implement `readlink`
+- [x] implement `realpath`
 
 #### Filesystem coverage
 
-- [ ] add parity coverage for cross-mount operations
-- [ ] add parity coverage for read-only overlay behavior
-- [ ] add parity coverage for host-persistent write roots
-- [ ] add parity coverage for symlink behavior
-- [ ] add parity coverage for permission and path-resolution failures
+- [x] add parity coverage for cross-mount operations
+- [x] add parity coverage for read-only overlay behavior
+- [x] add parity coverage for host-persistent write roots
+- [x] add parity coverage for symlink behavior
+- [x] add parity coverage for permission and path-resolution failures
 
 #### Richer initialization parity
 
-- [ ] add metadata-aware initial file support
-- [ ] add lazy file initialization support
-- [ ] document the exact precedence and interaction of `files=` and `fs=`
-- [ ] add contract/parity tests for richer initialization behavior
+- [x] add metadata-aware initial file support
+- [x] add lazy file initialization support
+- [x] add differential parity coverage for callable lazy files
+- [x] document the exact precedence and interaction of `files=` and `fs=`
+- [x] add contract/parity tests for richer initialization behavior
 
 ### Option parity
 
@@ -222,9 +233,8 @@ After the session API, CLI, filesystem API, and construction options are in plac
 The current recommended order is:
 
 1. confidence and maintenance work
-2. CLI parity through thin delegation
-3. filesystem parity beyond init-time `fs=`
-4. option parity
-5. broader export parity
+2. option parity
+3. broader export parity
+4. CLI parity through thin delegation
 
 That ordering is only a sequencing guide. The roadmap itself is organized by parity area so the desired end state stays clear.

@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -182,6 +183,52 @@ def assert_installed_optional_runtimes_work(installed: InstalledDistribution, *,
     assert javascript_payload == {"code": 0, "stdout": "bootstrapped:5\n", "stderr": ""}
 
 
+def assert_installed_session_fs_api_and_richer_initial_files_work(
+    installed: InstalledDistribution,
+    *,
+    label: str,
+) -> None:
+    completed = run_installed_python(
+        installed,
+        (
+            "import json\n"
+            "from datetime import UTC, datetime\n"
+            "from just_bash import Bash, FileInit, LazyFile\n"
+            "with Bash(\n"
+            "    cwd='/',\n"
+            "    files={\n"
+            "        'meta.txt': FileInit(content='meta\\n', mode=0o640, mtime=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)),\n"
+            "        'lazy.txt': LazyFile(provider='lazy\\n'),\n"
+            "    },\n"
+            ") as bash:\n"
+            "    bash.fs.mkdir('docs')\n"
+            "    bash.fs.write_text('docs/note.txt', 'note\\n')\n"
+            "    bash.fs.cp('docs/note.txt', 'copy.txt')\n"
+            "    bash.exec('ln -s copy.txt link.txt')\n"
+            "    stat = bash.fs.stat('meta.txt')\n"
+            "    payload = {\n"
+            "        'exists': bash.fs.exists('copy.txt'),\n"
+            "        'mode': stat.mode,\n"
+            "        'mtime': int(stat.mtime.timestamp()),\n"
+            "        'lazy': bash.read_text('lazy.txt'),\n"
+            "        'readlink': bash.fs.readlink('link.txt'),\n"
+            "        'realpath': bash.fs.realpath('link.txt'),\n"
+            "        'listing': sorted(bash.fs.readdir('/')),\n"
+            "    }\n"
+            "print(json.dumps(payload))\n"
+        ),
+    )
+    assert_packaged_runtime_available(completed, label=label)
+    payload = json.loads(completed.stdout)
+    assert payload["exists"] is True
+    assert payload["mode"] == 0o640
+    assert payload["mtime"] == int(datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC).timestamp())
+    assert payload["lazy"] == "lazy\n"
+    assert payload["readlink"] == "copy.txt"
+    assert payload["realpath"] == "/copy.txt"
+    assert {"copy.txt", "docs", "lazy.txt", "link.txt", "meta.txt"} <= set(payload["listing"])
+
+
 @pytest.fixture(scope="module")
 def installed_wheel() -> InstalledDistribution:
     root = Path(tempfile.mkdtemp(prefix="just-py-bash-installed-wheel-"))
@@ -248,6 +295,15 @@ def test_installed_wheel_supports_stateful_api_session(installed_wheel: Installe
     assert payload["cwd"] == "/workspace"
 
 
+def test_installed_wheel_supports_session_fs_api_and_richer_initial_files(
+    installed_wheel: InstalledDistribution,
+) -> None:
+    assert_installed_session_fs_api_and_richer_initial_files_work(
+        installed_wheel,
+        label="installed wheel session fs API test",
+    )
+
+
 def test_installed_wheel_supports_optional_python_and_javascript_runtimes(
     installed_wheel: InstalledDistribution,
 ) -> None:
@@ -281,6 +337,15 @@ def test_installed_sdist_console_script_runs_without_repo_checkout(
 
     assert completed.stdout == "sdist-cli"
     assert completed.stderr == ""
+
+
+def test_installed_sdist_supports_session_fs_api_and_richer_initial_files(
+    installed_sdist: InstalledDistribution,
+) -> None:
+    assert_installed_session_fs_api_and_richer_initial_files_work(
+        installed_sdist,
+        label="installed sdist session fs API test",
+    )
 
 
 def test_installed_sdist_supports_optional_python_and_javascript_runtimes(

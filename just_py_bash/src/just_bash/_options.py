@@ -4,10 +4,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ._codec import encode_file_value
-from ._fs import filesystem_to_wire
+from ._fs import InitialFileValue, LazyFileProvider, LazyFileRegistry, encode_initial_files, filesystem_to_wire
 from ._models import ExecutionLimits, JavaScriptConfig
-from ._types import ExecOptionsWire, FileValue, InitOptionsWire, NetworkConfig, ProcessInfo
+from ._types import ExecOptionsWire, InitOptionsWire, NetworkConfig, ProcessInfo
 
 if TYPE_CHECKING:
     from ._custom_commands import CustomCommandHandlers
@@ -16,7 +15,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True, kw_only=True)
 class BashOptions:
-    files: Mapping[str, FileValue] | None = None
+    files: Mapping[str, InitialFileValue] | None = None
     env: Mapping[str, str] | None = None
     cwd: str | None = None
     fs: FileSystemConfig | None = None
@@ -28,17 +27,18 @@ class BashOptions:
     network: NetworkConfig | None = None
     process_info: ProcessInfo | None = None
 
-    def to_wire(self) -> InitOptionsWire:
+    def to_bridge_init(self) -> tuple[InitOptionsWire, dict[str, LazyFileProvider]]:
         init_options: InitOptionsWire = {}
+        registry = LazyFileRegistry()
 
         if self.files is not None:
-            init_options["files"] = {path: encode_file_value(content) for path, content in self.files.items()}
+            init_options["files"] = encode_initial_files(self.files, registry=registry)
         if self.env is not None:
             init_options["env"] = dict(self.env)
         if self.cwd is not None:
             init_options["cwd"] = self.cwd
         if self.fs is not None:
-            init_options["fs"] = filesystem_to_wire(self.fs)
+            init_options["fs"] = filesystem_to_wire(self.fs, registry=registry)
         if self.execution_limits is not None:
             init_options["executionLimits"] = self.execution_limits.to_wire()
         if self.python:
@@ -56,6 +56,12 @@ class BashOptions:
         if self.process_info is not None:
             init_options["processInfo"] = self.process_info
 
+        return init_options, dict(registry.providers)
+
+    def to_wire(self) -> InitOptionsWire:
+        init_options, lazy_file_providers = self.to_bridge_init()
+        if lazy_file_providers:
+            raise ValueError("Lazy file callbacks require bridge-aware initialization")
         return init_options
 
 

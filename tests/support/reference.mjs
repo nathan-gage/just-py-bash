@@ -42,6 +42,34 @@ function decodeFileContent(value) {
   throw new Error('Unsupported file content payload');
 }
 
+function decodeInitialFileValue(value) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof value.kind === 'string'
+  ) {
+    switch (value.kind) {
+      case 'file_init': {
+        const decoded = {
+          content: decodeFileContent(value.content),
+        };
+        if (value.mode !== undefined) decoded.mode = value.mode;
+        if (value.mtimeMs !== undefined) decoded.mtime = new Date(value.mtimeMs);
+        return decoded;
+      }
+      case 'lazy_static':
+        return async () => decodeFileContent(value.content);
+      case 'lazy_callback':
+        throw new Error('reference harness does not support Python lazy file callbacks');
+      default:
+        throw new Error(`Unsupported initial file payload kind: ${String(value.kind)}`);
+    }
+  }
+
+  return decodeFileContent(value);
+}
+
 function decodeFiles(files) {
   if (!files) {
     return undefined;
@@ -49,7 +77,7 @@ function decodeFiles(files) {
 
   const decoded = {};
   for (const [path, value] of Object.entries(files)) {
-    decoded[path] = decodeFileContent(value);
+    decoded[path] = decodeInitialFileValue(value);
   }
   return decoded;
 }
@@ -120,6 +148,22 @@ function decodeExecOptions(options) {
   return decoded;
 }
 
+function normalizeFsStat(stat) {
+  return {
+    isFile: Boolean(stat?.isFile),
+    isDirectory: Boolean(stat?.isDirectory),
+    isSymbolicLink: Boolean(stat?.isSymbolicLink),
+    mode: Number.isInteger(stat?.mode) ? stat.mode : 0,
+    size: Number.isInteger(stat?.size) ? stat.size : 0,
+    mtimeMs:
+      stat?.mtime instanceof Date
+        ? stat.mtime.getTime()
+        : Number.isFinite(stat?.mtime?.valueOf?.())
+          ? Number(stat.mtime.valueOf())
+          : 0,
+  };
+}
+
 async function execWithTimeout(bash, script, options) {
   const timeoutMs = options?.timeoutMs;
   const execOptions = { ...options };
@@ -139,6 +183,10 @@ async function execWithTimeout(bash, script, options) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function resolveSessionPath(bash, path) {
+  return bash.fs.resolvePath(bash.getCwd(), path);
 }
 
 async function readStdin() {
@@ -176,9 +224,7 @@ for (const operation of request.operations) {
         results.push(
           wrapSuccess(
             encodeBytes(
-              await bash.fs.readFileBuffer(
-                bash.fs.resolvePath(bash.getCwd(), operation.path),
-              ),
+              await bash.fs.readFileBuffer(resolveSessionPath(bash, operation.path)),
             ),
           ),
         );
@@ -190,6 +236,63 @@ for (const operation of request.operations) {
       case 'write_bytes':
         await bash.writeFile(operation.path, decodeBytes(operation.content));
         results.push(wrapSuccess(null));
+        break;
+      case 'exists':
+        results.push(wrapSuccess(await bash.fs.exists(resolveSessionPath(bash, operation.path))));
+        break;
+      case 'stat':
+        results.push(
+          wrapSuccess(
+            normalizeFsStat(await bash.fs.stat(resolveSessionPath(bash, operation.path))),
+          ),
+        );
+        break;
+      case 'mkdir':
+        await bash.fs.mkdir(resolveSessionPath(bash, operation.path), {
+          recursive: operation.recursive,
+        });
+        results.push(wrapSuccess(null));
+        break;
+      case 'readdir':
+        results.push(
+          wrapSuccess(await bash.fs.readdir(resolveSessionPath(bash, operation.path))),
+        );
+        break;
+      case 'rm':
+        await bash.fs.rm(resolveSessionPath(bash, operation.path), {
+          recursive: operation.recursive,
+          force: operation.force,
+        });
+        results.push(wrapSuccess(null));
+        break;
+      case 'cp':
+        await bash.fs.cp(
+          resolveSessionPath(bash, operation.src),
+          resolveSessionPath(bash, operation.dest),
+          { recursive: operation.recursive },
+        );
+        results.push(wrapSuccess(null));
+        break;
+      case 'mv':
+        await bash.fs.mv(
+          resolveSessionPath(bash, operation.src),
+          resolveSessionPath(bash, operation.dest),
+        );
+        results.push(wrapSuccess(null));
+        break;
+      case 'chmod':
+        await bash.fs.chmod(resolveSessionPath(bash, operation.path), operation.mode);
+        results.push(wrapSuccess(null));
+        break;
+      case 'readlink':
+        results.push(
+          wrapSuccess(await bash.fs.readlink(resolveSessionPath(bash, operation.path))),
+        );
+        break;
+      case 'realpath':
+        results.push(
+          wrapSuccess(await bash.fs.realpath(resolveSessionPath(bash, operation.path))),
+        );
         break;
       case 'get_env':
         results.push(wrapSuccess(bash.getEnv()));

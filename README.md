@@ -158,7 +158,7 @@ bash.close()
 
 ### Session options
 
-- `files`: initial in-memory files
+- `files`: initial in-memory files; values can be plain text/bytes, `FileInit(...)`, or `LazyFile(...)`
 - `env`: initial environment
 - `cwd`: starting directory
 - `fs`: upstream-style filesystem config object (`InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`)
@@ -179,7 +179,18 @@ The wrapper now exposes upstream-style init-time filesystem config objects:
 - `ReadWriteFs(root=...)`
 - `MountableFs(base=..., mounts=[MountConfig(...)])`
 
-These are serialized when the session starts and decoded into real upstream `just-bash` filesystem instances inside the Node worker. They are config objects, not live Python filesystem implementations.
+`files=` and `InMemoryFs(files=...)` both support richer initial values too:
+
+- plain text / bytes
+- `FileInit(content=..., mode=..., mtime=...)`
+- `LazyFile(provider=...)`
+
+`LazyFile(provider=...)` accepts either:
+
+- static deferred content (`str` / `bytes`), or
+- a Python callable returning `str` / `bytes` (sync or async)
+
+These are serialized when the session starts and decoded into real upstream `just-bash` filesystem instances inside the Node worker. The filesystem config classes are config objects, not live Python filesystem implementations.
 
 ```python
 from just_bash import Bash, MountConfig, MountableFs, OverlayFs, ReadWriteFs
@@ -208,6 +219,56 @@ with Bash(
 ```
 
 If you pass both `files=` and `fs=`, upstream `just-bash` semantics apply and `fs=` takes precedence.
+
+### Session filesystem API
+
+Each session now also exposes a session-bound filesystem proxy at `bash.fs` / `async_bash.fs`.
+
+Available methods:
+
+- `read_text(path)`
+- `read_bytes(path)`
+- `write_text(path, content)`
+- `write_bytes(path, content)`
+- `exists(path)`
+- `stat(path)` → `FsStat`
+- `mkdir(path, recursive=False)`
+- `readdir(path)`
+- `rm(path, recursive=False, force=False)`
+- `cp(src, dest, recursive=False)`
+- `mv(src, dest)`
+- `chmod(path, mode)`
+- `readlink(path)`
+- `realpath(path)`
+
+Paths are resolved with upstream `just-bash` session semantics, so relative paths are interpreted against the session cwd.
+
+```python
+from datetime import UTC, datetime
+
+from just_bash import Bash, FileInit, LazyFile
+
+with Bash(
+    files={
+        "seed.txt": FileInit(
+            content="seed\n",
+            mode=0o640,
+            mtime=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC),
+        ),
+        "lazy.txt": LazyFile(provider=lambda: "lazy content\n"),
+    },
+    cwd="/workspace",
+) as bash:
+    bash.fs.mkdir("docs")
+    bash.fs.write_text("docs/note.txt", "hello\n")
+    bash.fs.cp("docs/note.txt", "copy.txt")
+    bash.exec("ln -s copy.txt link.txt")
+
+    stat = bash.fs.stat("copy.txt")
+    print(stat.mode)
+    print(bash.fs.readlink("link.txt"))
+    print(bash.fs.realpath("link.txt"))
+```
 
 ### Per-exec options
 
@@ -327,9 +388,9 @@ If you provide only `js_entry=` or `JUST_BASH_JS_ENTRY`, the wrapper will try to
 
 ## Scope Compared to Upstream TypeScript API
 
-This wrapper intentionally focuses on the portable Python session API. It mirrors the upstream shell behavior, options, custom commands, optional capabilities, and now the init-time filesystem configuration model via `fs=` plus `InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, and `MountConfig`.
+This wrapper intentionally focuses on the portable Python session API. It mirrors the upstream shell behavior, options, custom commands, optional capabilities, the init-time filesystem configuration model via `fs=` plus `InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, and `MountConfig`, and now a session-bound filesystem API via `bash.fs` / `async_bash.fs`.
 
-What it still does **not** expose is the broader low-level filesystem method surface or live Python filesystem adapter interfaces from the TypeScript package. If you need those lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API with upstream-backed filesystem configs, use `just-py-bash`.
+What it still does **not** expose is the full low-level TypeScript filesystem surface or live Python filesystem adapter interfaces from the TypeScript package. The Python wrapper currently covers the session-facing filesystem methods (`exists`, `stat`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, plus the text/bytes helpers), but not the remaining lower-level pieces like `lstat`, `symlink`, `link`, `utimes`, or `readdirWithFileTypes`. If you need those full lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API with upstream-backed filesystem behavior, use `just-py-bash`.
 
 ## Contributing / Development
 
@@ -381,8 +442,8 @@ The repo's own workspace is already wired to use the local package during `uv sy
 
 The test suite treats upstream `just-bash` as the semantic oracle for current wrapper parity.
 
-- `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, and dedicated filesystem-config parity coverage
-- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, and key execution limits using local fixtures rather than public-internet dependencies
+- `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, dedicated filesystem-config parity coverage, and new session-fs parity coverage
+- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, richer initial files, session fs operations, and key execution limits using local fixtures rather than public-internet dependencies
 - `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, and installed wheel/sdist runtime behavior
 - `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, example smoke coverage, and the current CLI surface
 
