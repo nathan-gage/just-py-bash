@@ -23,7 +23,7 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `80 passed`
+- The current local test count is `86 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 
@@ -75,7 +75,7 @@ That suite currently covers:
 
 The rest of the test suite complements parity coverage with Python-specific guarantees:
 
-- API tests for session lifecycle, result handling, constructors, CLI behavior, and bridge failure paths
+- API tests for session lifecycle, result handling, constructors, CLI behavior, bridge failure paths, and example smoke coverage
 - contract tests for custom commands, backend selection, optional runtimes, and installation/distribution behavior
 - smoke coverage for installed wheel/sdist usage outside a repo checkout
 
@@ -94,6 +94,7 @@ These milestones are already in place:
 - [x] wheel/sdist smoke coverage for optional Python and JavaScript runtimes
 - [x] init-time filesystem config support via `fs=`
 - [x] sync and async parity coverage for `OverlayFs`, `ReadWriteFs`, and `MountableFs`
+- [x] repo-root smoke coverage for the shipped non-network examples
 
 ## Roadmap
 
@@ -101,9 +102,9 @@ These milestones are already in place:
 
 #### Example smoke coverage
 
-- [ ] add smoke tests for `examples/`
-- [ ] run the examples as public-API programs rather than testing private internals
-- [ ] keep examples aligned with the documented SDK surface only
+- [x] add smoke tests for `examples/`
+- [x] run the examples as public-API programs rather than testing private internals
+- [x] keep examples aligned with the documented SDK surface only
 
 #### Execution-limit breadth
 

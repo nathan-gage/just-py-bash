@@ -5,17 +5,19 @@ These examples mirror the spirit of the vendored `just-bash` README and `example
 Run them from the repository root:
 
 ```bash
-uv run python examples/quickstart_sync.py
-uv run python examples/quickstart_async.py
-uv run python examples/custom_commands_sync.py
-uv run python examples/custom_commands_async.py
-uv run python examples/configuration_and_runtimes.py
+uv run --with-editable ./just_py_bash python examples/quickstart_sync.py
+uv run --with-editable ./just_py_bash python examples/quickstart_async.py
+uv run --with-editable ./just_py_bash python examples/custom_commands_sync.py
+uv run --with-editable ./just_py_bash python examples/custom_commands_async.py
+uv run --with-editable ./just_py_bash python examples/configuration_and_runtimes.py
 ```
+
+These non-network examples are smoke-tested with the same repo-root invocation.
 
 Optional example:
 
 ```bash
-uv run python examples/network_access.py
+uv run --with-editable ./just_py_bash python examples/network_access.py
 ```
 
 ## Included examples
@@ -31,7 +33,7 @@ uv run python examples/network_access.py
 
 ## Notes
 
-- The Python wrapper currently focuses on the portable session-oriented API. Unlike upstream TypeScript examples, it does not yet expose `OverlayFs`, `ReadWriteFs`, or `MountableFs` directly.
+- The Python wrapper now exposes upstream-style filesystem config objects such as `OverlayFs`, `ReadWriteFs`, and `MountableFs`, but the current example set is still centered on the session-oriented API.
 - The async examples use the native-async `AsyncBash` bridge, not thread offloading.
 - The network example is intentionally separate because it depends on live internet access.
 - The network example uses `http://example.com` so it remains reliable even in environments where Node's HTTPS certificate store is restricted.
