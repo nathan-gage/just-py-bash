@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +21,7 @@ RUNTIME_PACKAGE_ROOT = ROOT / "just_bash_bundled_runtime"
 pytestmark = [
     pytest.mark.contract,
     pytest.mark.packaging,
-    pytest.mark.xdist_group(name="distribution_contracts"),
+    pytest.mark.xdist_group(name="runtime_contracts"),
 ]
 
 
@@ -70,9 +71,29 @@ def build_distribution(kind: str, dist_dir: Path, *, package_root: Path = PACKAG
 
 
 def scrub_distribution_env() -> dict[str, str]:
-    env = os.environ.copy()
+    keep = {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "SYSTEMROOT",
+        "COMSPEC",
+        "PATHEXT",
+        "APPDATA",
+        "LOCALAPPDATA",
+    }
+    env = {key: value for key, value in os.environ.items() if key.upper() in keep}
     env.pop("JUST_BASH_JS_ENTRY", None)
     env.pop("JUST_BASH_PACKAGE_JSON", None)
+    env.pop("PYTHONPATH", None)
+    env.pop("VIRTUAL_ENV", None)
+    env.pop("PYTEST_CURRENT_TEST", None)
+    env.pop("PYTEST_XDIST_WORKER", None)
+    env.pop("PYTEST_XDIST_WORKER_COUNT", None)
+    env.pop("COV_CORE_SOURCE", None)
+    env.pop("COV_CORE_CONFIG", None)
+    env.pop("COV_CORE_DATAFILE", None)
     return env
 
 
@@ -131,16 +152,46 @@ def assert_packaged_runtime_available(completed: subprocess.CompletedProcess[str
     )
 
 
+def assert_installed_optional_runtimes_work(installed: InstalledDistribution, *, label: str) -> None:
+    python_completed = run_installed_python(
+        installed,
+        (
+            "import json\n"
+            "from just_bash import Bash\n"
+            "with Bash(python=True) as bash:\n"
+            "    result = bash.exec('python -c \\\"print(sum([2, 3, 5]))\\\"', timeout=60)\n"
+            "print(json.dumps({'code': result.exit_code, 'stdout': result.stdout, 'stderr': result.stderr}))\n"
+        ),
+    )
+    assert_packaged_runtime_available(python_completed, label=f"{label} python runtime")
+    python_payload = json.loads(python_completed.stdout)
+    assert python_payload == {"code": 0, "stdout": "10\n", "stderr": ""}
+
+    javascript_completed = run_installed_python(
+        installed,
+        (
+            "import json\n"
+            "from just_bash import Bash, JavaScriptConfig\n"
+            "with Bash(javascript=JavaScriptConfig(bootstrap=\"globalThis.prefix = 'bootstrapped';\")) as bash:\n"
+            '    result = bash.exec("js-exec -c \'console.log(globalThis.prefix + \\"\\:\\" + (2 + 3))\'", timeout=60)\n'
+            "print(json.dumps({'code': result.exit_code, 'stdout': result.stdout, 'stderr': result.stderr}))\n"
+        ),
+    )
+    assert_packaged_runtime_available(javascript_completed, label=f"{label} javascript runtime")
+    javascript_payload = json.loads(javascript_completed.stdout)
+    assert javascript_payload == {"code": 0, "stdout": "bootstrapped:5\n", "stderr": ""}
+
+
 @pytest.fixture(scope="module")
-def installed_wheel(tmp_path_factory: pytest.TempPathFactory) -> InstalledDistribution:
-    root = tmp_path_factory.mktemp("installed-wheel")
+def installed_wheel() -> InstalledDistribution:
+    root = Path(tempfile.mkdtemp(prefix="just-py-bash-installed-wheel-"))
     wheel = build_distribution("wheel", root / "dist")
     return install_distribution(wheel, root)
 
 
 @pytest.fixture(scope="module")
-def installed_sdist(tmp_path_factory: pytest.TempPathFactory) -> InstalledDistribution:
-    root = tmp_path_factory.mktemp("installed-sdist")
+def installed_sdist() -> InstalledDistribution:
+    root = Path(tempfile.mkdtemp(prefix="just-py-bash-installed-sdist-"))
     sdist = build_distribution("sdist", root / "dist")
     return install_distribution(sdist, root)
 
@@ -197,6 +248,12 @@ def test_installed_wheel_supports_stateful_api_session(installed_wheel: Installe
     assert payload["cwd"] == "/workspace"
 
 
+def test_installed_wheel_supports_optional_python_and_javascript_runtimes(
+    installed_wheel: InstalledDistribution,
+) -> None:
+    assert_installed_optional_runtimes_work(installed_wheel, label="installed wheel")
+
+
 def test_installed_sdist_boots_without_repo_checkout(installed_sdist: InstalledDistribution) -> None:
     completed = run_installed_python(
         installed_sdist,
@@ -224,6 +281,12 @@ def test_installed_sdist_console_script_runs_without_repo_checkout(
 
     assert completed.stdout == "sdist-cli"
     assert completed.stderr == ""
+
+
+def test_installed_sdist_supports_optional_python_and_javascript_runtimes(
+    installed_sdist: InstalledDistribution,
+) -> None:
+    assert_installed_optional_runtimes_work(installed_sdist, label="installed sdist")
 
 
 def test_wheel_declares_explicit_node_extra(tmp_path: Path) -> None:

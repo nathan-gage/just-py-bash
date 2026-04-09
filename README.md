@@ -283,6 +283,8 @@ To point at a different `just-bash` backend artifact, set:
 - `JUST_BASH_PACKAGE_JSON`
 - optionally `JUST_BASH_NODE`
 
+If you provide only `js_entry=` or `JUST_BASH_JS_ENTRY`, the wrapper will try to infer the matching `package.json` by walking parent directories. That works for both `dist/index.js` and `dist/bundle/index.js`, but you can still pass `package_json=` / `JUST_BASH_PACKAGE_JSON` explicitly when you want to be precise.
+
 ## Scope Compared to Upstream TypeScript API
 
 This wrapper intentionally focuses on the portable Python session API. It mirrors the upstream shell behavior, options, custom commands, and optional capabilities, but it does **not** yet expose the lower-level filesystem classes from the TypeScript package like `OverlayFs`, `ReadWriteFs`, or `MountableFs` directly.
@@ -339,9 +341,12 @@ The repo's own workspace is already wired to use the local package during `uv sy
 
 The test suite treats upstream `just-bash` as the semantic oracle for current wrapper parity.
 
-- `tests/parity/` compares the Python wrapper against a direct Node reference harness
-- `tests/contracts/` covers Python-specific guarantees like custom commands and packaging
-- `tests/api/` covers the public API contract
+- `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios and generated transcripts
+- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, and key execution limits using local fixtures rather than public-internet dependencies
+- `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, and installed wheel/sdist runtime behavior
+- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, and the minimal CLI surface
+
+For day-to-day development, `make all` is the main confidence gate: format, lint, typecheck, and the full test suite.
 
 ## Design Notes
 

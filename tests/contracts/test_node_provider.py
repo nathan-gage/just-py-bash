@@ -108,6 +108,45 @@ def test_bundled_node_provider_is_preferred_over_system_node(tmp_path: Path) -> 
     assert marker_path.exists()
 
 
+def test_just_bash_node_environment_variable_is_used_when_set(tmp_path: Path) -> None:
+    node_path = shutil.which("node")
+    if node_path is None:
+        pytest.skip("node is required for provider resolution tests")
+
+    marker_path = tmp_path / "env-marker.txt"
+    wrapper_path = tmp_path / "env-wrapper.py"
+    write_node_wrapper(wrapper_path, marker_path, node_path)
+
+    env = os.environ.copy()
+    env["JUST_BASH_NODE"] = f"{sys.executable} {wrapper_path}"
+    env["PYTHONPATH"] = os.pathsep.join(str(entry) for entry in [PACKAGE_SRC, *existing_pythonpath_entries(env)])
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(
+                """
+                from just_bash import Bash
+
+                with Bash() as bash:
+                    result = bash.exec("printf env-node")
+
+                print(result.stdout, end="")
+                """,
+            ),
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == "env-node"
+    assert marker_path.exists()
+
+
 def test_node_command_argument_overrides_bundled_node_provider(tmp_path: Path) -> None:
     node_path = shutil.which("node")
     if node_path is None:

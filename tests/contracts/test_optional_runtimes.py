@@ -9,7 +9,7 @@ from pytest import MonkeyPatch
 
 from tests.support.harness import ROOT, public_api
 
-pytestmark = pytest.mark.contract
+pytestmark = [pytest.mark.contract, pytest.mark.xdist_group(name="runtime_contracts")]
 
 
 @pytest.fixture(scope="module")
@@ -68,6 +68,26 @@ def test_python_runtime_executes_when_enabled(
     assert result.exit_code == 0
     assert result.stdout == "10\n"
     assert result.stderr == ""
+
+
+def test_python_runtime_respects_execution_timeout_limit(
+    monkeypatch: MonkeyPatch,
+    packaged_runtime_artifacts: tuple[str, str],
+) -> None:
+    use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
+    api = public_api()
+    Bash = api.Bash
+    ExecutionLimits = api.ExecutionLimits
+
+    with Bash(
+        python=True,
+        execution_limits=ExecutionLimits(max_python_timeout_ms=50),
+    ) as bash:
+        result = bash.exec('python -c "import time; time.sleep(0.2)"', timeout=60)
+
+    assert result.exit_code == 124
+    assert "execution timeout exceeded" in result.stderr.lower()
+    assert "50ms limit" in result.stderr
 
 
 def test_javascript_runtime_executes_when_enabled(
