@@ -91,7 +91,7 @@ def run_example(case: ExampleCase) -> subprocess.CompletedProcess[str]:
         raise RuntimeError("uv executable is required to run example smoke tests")
 
     return subprocess.run(
-        [uv, "run", "--with-editable", "./just_py_bash", "python", str(case.script)],
+        [uv, "run", "--quiet", "--with-editable", "./just_py_bash", "python", str(case.script)],
         cwd=ROOT,
         env=os.environ.copy(),
         text=True,
