@@ -161,6 +161,7 @@ bash.close()
 - `files`: initial in-memory files
 - `env`: initial environment
 - `cwd`: starting directory
+- `fs`: upstream-style filesystem config object (`InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`)
 - `execution_limits`: validated execution protection settings
 - `python=True`: enable `python` / `python3`
 - `javascript=True` or `JavaScriptConfig(...)`: enable `js-exec`
@@ -168,6 +169,45 @@ bash.close()
 - `custom_commands`: register Python-defined commands
 - `network`: configure allow-listed network access
 - `process_info`: process metadata passed to the backend
+
+### Filesystem configuration objects
+
+The wrapper now exposes upstream-style init-time filesystem config objects:
+
+- `InMemoryFs(files=...)`
+- `OverlayFs(root=..., mount_point=..., read_only=...)`
+- `ReadWriteFs(root=...)`
+- `MountableFs(base=..., mounts=[MountConfig(...)])`
+
+These are serialized when the session starts and decoded into real upstream `just-bash` filesystem instances inside the Node worker. They are config objects, not live Python filesystem implementations.
+
+```python
+from just_bash import Bash, MountConfig, MountableFs, OverlayFs, ReadWriteFs
+
+with Bash(
+    fs=MountableFs(
+        mounts=[
+            MountConfig(
+                mount_point="/workspace",
+                filesystem=ReadWriteFs(root="/tmp/project"),
+            ),
+            MountConfig(
+                mount_point="/docs",
+                filesystem=OverlayFs(
+                    root="/path/to/docs",
+                    mount_point="/",
+                    read_only=True,
+                ),
+            ),
+        ],
+    ),
+    cwd="/workspace",
+) as bash:
+    result = bash.exec("cp /docs/README.md ./README.copy.md && ls")
+    print(result.stdout, end="")
+```
+
+If you pass both `files=` and `fs=`, upstream `just-bash` semantics apply and `fs=` takes precedence.
 
 ### Per-exec options
 
@@ -287,9 +327,9 @@ If you provide only `js_entry=` or `JUST_BASH_JS_ENTRY`, the wrapper will try to
 
 ## Scope Compared to Upstream TypeScript API
 
-This wrapper intentionally focuses on the portable Python session API. It mirrors the upstream shell behavior, options, custom commands, and optional capabilities, but it does **not** yet expose the lower-level filesystem classes from the TypeScript package like `OverlayFs`, `ReadWriteFs`, or `MountableFs` directly.
+This wrapper intentionally focuses on the portable Python session API. It mirrors the upstream shell behavior, options, custom commands, optional capabilities, and now the init-time filesystem configuration model via `fs=` plus `InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, and `MountConfig`.
 
-If you need those exact low-level host-filesystem integration primitives today, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API, use `just-py-bash`.
+What it still does **not** expose is the broader low-level filesystem method surface or live Python filesystem adapter interfaces from the TypeScript package. If you need those lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API with upstream-backed filesystem configs, use `just-py-bash`.
 
 ## Contributing / Development
 
@@ -341,8 +381,8 @@ The repo's own workspace is already wired to use the local package during `uv sy
 
 The test suite treats upstream `just-bash` as the semantic oracle for current wrapper parity.
 
-- `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios and generated transcripts
-- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, and key execution limits using local fixtures rather than public-internet dependencies
+- `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, and dedicated filesystem-config parity coverage
+- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, and key execution limits using local fixtures rather than public-internet dependencies
 - `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, and installed wheel/sdist runtime behavior
 - `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, and the minimal CLI surface
 

@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ._codec import encode_file_value
+from ._fs import filesystem_to_wire
 from ._models import ExecutionLimits, JavaScriptConfig
 from ._types import ExecOptionsWire, FileValue, InitOptionsWire, NetworkConfig, ProcessInfo
 
 if TYPE_CHECKING:
     from ._custom_commands import CustomCommandHandlers
+    from ._fs import FileSystemConfig
 
 
 @dataclass(slots=True, kw_only=True)
@@ -17,6 +19,7 @@ class BashOptions:
     files: Mapping[str, FileValue] | None = None
     env: Mapping[str, str] | None = None
     cwd: str | None = None
+    fs: FileSystemConfig | None = None
     execution_limits: ExecutionLimits | None = None
     python: bool = False
     javascript: bool | JavaScriptConfig = False
@@ -34,6 +37,8 @@ class BashOptions:
             init_options["env"] = dict(self.env)
         if self.cwd is not None:
             init_options["cwd"] = self.cwd
+        if self.fs is not None:
+            init_options["fs"] = filesystem_to_wire(self.fs)
         if self.execution_limits is not None:
             init_options["executionLimits"] = self.execution_limits.to_wire()
         if self.python:

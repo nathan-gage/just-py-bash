@@ -9,6 +9,7 @@ from ._async_bridge import AsyncNodeBridge
 from ._codec import decode_bytes_payload, encode_file_value
 from ._custom_commands import AsyncCustomCommands
 from ._exceptions import BridgeError
+from ._fs import FileSystemConfig
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._options import BashOptions, ExecOptions
 from ._types import FileValue, NetworkConfig, ProcessInfo
@@ -28,6 +29,7 @@ class AsyncBash:
         files: Mapping[str, FileValue] | None = None,
         env: Mapping[str, str] | None = None,
         cwd: str | None = None,
+        fs: FileSystemConfig | None = None,
         execution_limits: ExecutionLimits | None = None,
         python: bool = False,
         javascript: bool | JavaScriptConfig = False,
@@ -43,6 +45,7 @@ class AsyncBash:
             files=files,
             env=env,
             cwd=cwd,
+            fs=fs,
             execution_limits=execution_limits,
             python=python,
             javascript=javascript,

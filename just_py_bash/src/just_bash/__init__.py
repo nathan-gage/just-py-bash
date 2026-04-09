@@ -22,6 +22,7 @@ from ._exceptions import (
     CommandFailedError,
     JustBashError,
 )
+from ._fs import InMemoryFs, MountableFs, MountConfig, OverlayFs, ReadWriteFs
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._options import BashOptions, ExecOptions
 from ._types import AllowedUrl, AllowedUrlEntry, NetworkConfig, ProcessInfo, RequestTransform
@@ -51,9 +52,14 @@ __all__ = [
     "ExecOptions",
     "ExecResult",
     "ExecutionLimits",
+    "InMemoryFs",
+    "MountConfig",
+    "MountableFs",
     "NetworkConfig",
+    "OverlayFs",
     "ProcessInfo",
     "JavaScriptConfig",
+    "ReadWriteFs",
     "JustBashError",
     "RequestTransform",
     "__version__",

@@ -78,10 +78,46 @@ class JavaScriptConfigWire(TypedDict, total=False):
     bootstrap: str
 
 
+class InMemoryFsWire(TypedDict, total=False):
+    kind: Literal["in_memory"]
+    files: Mapping[str, EncodedFileValue]
+
+
+class OverlayFsWire(TypedDict, total=False):
+    kind: Literal["overlay"]
+    root: str
+    mountPoint: str
+    readOnly: bool
+    maxFileReadSize: int
+    allowSymlinks: bool
+
+
+class ReadWriteFsWire(TypedDict, total=False):
+    kind: Literal["read_write"]
+    root: str
+    maxFileReadSize: int
+    allowSymlinks: bool
+
+
+class MountConfigWire(TypedDict):
+    mountPoint: str
+    filesystem: FsConfigWire
+
+
+class MountableFsWire(TypedDict, total=False):
+    kind: Literal["mountable"]
+    base: FsConfigWire
+    mounts: Sequence[MountConfigWire]
+
+
+FsConfigWire: TypeAlias = InMemoryFsWire | OverlayFsWire | ReadWriteFsWire | MountableFsWire
+
+
 class InitOptionsWire(TypedDict, total=False):
     files: Mapping[str, EncodedFileValue]
     env: Mapping[str, str]
     cwd: str
+    fs: FsConfigWire
     executionLimits: ExecutionLimitsWire
     python: bool
     javascript: bool | JavaScriptConfigWire

@@ -16,17 +16,16 @@ This roadmap was prepared by reviewing:
 
 ## Current snapshot
 
-Latest local validation after the current test expansion work:
+Latest local validation after the current filesystem-config expansion work:
 
 ```bash
 make all
-uv run pytest -q
 ```
 
 Result:
 
 - `make all` passes
-- `72 passed`
+- `80 passed`
 
 Coverage is only one signal. For this project, the strongest confidence still comes from the black-box differential tests in `tests/parity/` that compare the Python wrapper against direct upstream `just-bash` execution.
 
@@ -63,8 +62,8 @@ Coverage is only one signal. For this project, the strongest confidence still co
 | Packaged wheel runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
 | Packaged sdist runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
 | Packaged runtime for optional Python/JS assets | Implemented by build script | Moderate | `tests/contracts/test_distributions.py` | Installed wheel/sdist tests now verify packaged Python and JavaScript runtime smoke paths. |
-| Low-level upstream fs classes (`OverlayFs`, `ReadWriteFs`, `MountableFs`) | Not implemented | Planned | N/A | Explicitly called out as missing in README/examples. |
-| Low-level fs API surface (`stat`, `readdir`, `mkdir`, `rm`, etc.) | Not implemented | Planned | N/A | Current Python wrapper only exposes session helpers plus read/write convenience methods. |
+| Init-time fs config objects (`InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, `MountConfig`) | Implemented | Moderate | `tests/api/test_fs_config_api.py`, `tests/parity/test_filesystem_configs.py` | Mirrors upstream constructor shapes for session init; sync and async parity now cover overlay/read-write/mountable behavior. |
+| Low-level fs API surface (`stat`, `readdir`, `mkdir`, `rm`, etc.) | Not implemented | Planned | N/A | Current Python wrapper now supports `fs=` config objects, but still only exposes session helpers plus read/write convenience methods. |
 | Upstream `fetch`, `logger`, `trace`, `defenseInDepth`, `coverage` options | Not implemented | Planned | N/A | No Python equivalents yet. |
 | Upstream transform/plugin/parser/security/sandbox exports | Not implemented | Planned | N/A | Outside current session-focused wrapper scope. |
 
@@ -78,6 +77,7 @@ The package already ships a usable session-oriented wrapper around upstream `jus
 - `AsyncBash` for `asyncio`
 - `ExecResult`, `ExecutionLimits`, `JavaScriptConfig`
 - typed network/process-info models
+- init-time fs config objects (`InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, `MountConfig`) plus `fs=` session construction
 - custom command support for sync and async Python callables
 - convenience file helpers (`read_text`, `read_bytes`, `write_text`, `write_bytes`)
 - a minimal `just-py-bash` CLI
@@ -116,7 +116,8 @@ The best-tested areas are:
 - file helper round-trips
 - exec option translation
 - sync custom command behavior
-- differential parity for generated wrapper transcripts
+- generated wrapper transcript parity
+- sync and async filesystem-config parity for shipped fs constructors
 
 ## What is properly tested today
 
@@ -135,6 +136,7 @@ Curated scenarios currently cover:
 - local-network config parity against a test HTTP server
 - `process_info` parity including virtual `/proc` surfaces
 - targeted execution-limit parity for loop, heredoc, and output limits
+- overlay/read-write/mountable filesystem config parity, including read-only overlays and persistent host writes
 - the same curated corpus through `AsyncBash`
 
 Generated transcripts add randomized coverage for:
@@ -159,6 +161,7 @@ The public API tests verify:
 - idempotent `close()` behavior
 - basic async session behavior
 - `Bash.from_options(...)` and `AsyncBash.from_options(...)`
+- `InMemoryFs` acceptance through `Bash(...)` and `AsyncBash(...)`
 - CLI behavior for `--cwd`, `--python`, `--timeout`, `--version`, stdin piping, and exit-code propagation
 - bridge unhappy paths including malformed worker responses, worker crashes, backend-unavailable cases, and timeout behavior
 
@@ -196,6 +199,7 @@ Completed recently:
 - `from_options(...)` tests for both sync and async
 - async curated and generated differential parity harnesses
 - async failure-path tests
+- Python-side fs config classes plus sync/async parity coverage for overlay, read-write, and mountable behavior
 
 Remaining near-term gaps:
 
@@ -237,26 +241,21 @@ Potential additions:
 - clearer docs for packaged-runtime refresh flow and release process
 - clearer statement of CLI scope: helper CLI vs near-upstream CLI parity
 
-### 4. Plan the larger upstream parity work
+### 4. Plan the next upstream parity work
 
-If the goal is to support more of the remaining upstream TypeScript surface, the next major milestone should be filesystem support.
+The largest construction-time parity gap is no longer `fs=` support; that milestone is now in place. The next question is how far the Python wrapper should go beyond init-time filesystem config objects.
 
 Recommended order:
 
-1. **Add Python fs config objects**
-   - `InMemoryFs`
-   - `OverlayFs`
-   - `ReadWriteFs`
-   - `MountableFs`
-
-2. **Support `Bash(fs=...)` / `AsyncBash(fs=...)`**
-   - Initially as serialized config specs, not as full live Python filesystem implementations.
-
-3. **Expose a session-bound fs proxy only if needed**
+1. **Decide whether a session-bound fs proxy belongs in the public API**
    - `stat`, `exists`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, etc.
-   - This is a larger bridge/API expansion and should come after init-time `fs=` support.
+   - This is a much larger bridge/API expansion than serialized init-time config objects.
 
-4. **Only then consider lower-priority upstream APIs**
+2. **Improve richer file-initialization parity if users need it**
+   - upstream-style metadata/lazy file initialization
+   - clearer semantics where `files=` and `fs=` overlap
+
+3. **Only then consider lower-priority upstream APIs**
    - `fetch`
    - `logger`
    - `trace`
@@ -293,9 +292,9 @@ Recommended order:
 
 ### Phase 3: Close the largest upstream parity gap
 
-- [ ] Python-side fs config classes
-- [ ] `Bash(fs=...)` and `AsyncBash(fs=...)`
-- [ ] tests for overlay/read-write/mountable behavior
+- [x] Python-side fs config classes
+- [x] `Bash(fs=...)` and `AsyncBash(fs=...)`
+- [x] tests for overlay/read-write/mountable behavior
 - [ ] decide whether low-level fs proxies belong in the public API
 
 ### Phase 4: Optional advanced parity
@@ -314,12 +313,13 @@ The project already has a solid and useful core:
 - the packaging story is real
 - parity testing against upstream is already the backbone of confidence
 
-The recent test expansion closed most of the highest-value confidence gaps for the current API surface.
+The recent expansion work closed most of the highest-value confidence gaps for the current API surface and added the first filesystem-construction milestone via upstream-style `fs=` config objects.
 
 What remains is now clearer:
 
 - example smoke coverage
 - a few deeper execution-limit cases
 - an explicit decision about long-term CLI scope
+- a decision about whether low-level fs proxy methods belong in the Python API
 
-With those confidence gaps mostly addressed, the natural next major roadmap item is support for the missing upstream filesystem classes and `fs=`-based session construction.
+With those confidence gaps mostly addressed, the next major roadmap question is no longer whether to support `fs=` at all, but whether to go further and expose a larger session-bound filesystem API.
