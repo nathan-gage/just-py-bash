@@ -16,19 +16,19 @@ This roadmap was prepared by reviewing:
 
 ## Current snapshot
 
-Latest local validation during this review:
+Latest local validation after the current test expansion work:
 
 ```bash
-uv run coverage run -m pytest -q
-uv run coverage report -m
+make all
+uv run pytest -q
 ```
 
 Result:
 
-- `31 passed`
-- total Python coverage: `77.59%`
+- `make all` passes
+- `72 passed`
 
-Coverage is only one signal. For this project, the strongest confidence comes from the black-box differential tests in `tests/parity/` that compare the Python wrapper against direct upstream `just-bash` execution.
+Coverage is only one signal. For this project, the strongest confidence still comes from the black-box differential tests in `tests/parity/` that compare the Python wrapper against direct upstream `just-bash` execution.
 
 ## Confidence legend
 
@@ -43,7 +43,7 @@ Coverage is only one signal. For this project, the strongest confidence comes fr
 | Capability | Implementation status | Test confidence | Where it is covered | Notes |
 |---|---|---:|---|---|
 | Synchronous session API (`Bash`) | Implemented | Strong | `tests/api/test_session_api.py`, `tests/parity/*`, packaging tests | Core public surface works and is exercised end-to-end. |
-| Native async session API (`AsyncBash`) | Implemented | Moderate | `tests/api/test_session_api.py`, async custom-command contract test | Happy-path async use is covered, but there is no async differential parity corpus yet. |
+| Native async session API (`AsyncBash`) | Implemented | Strong | `tests/api/test_session_api.py`, `tests/parity/test_async_*`, async custom-command contract test | Async now has the same curated + generated differential parity shape as sync. |
 | Long-lived session with shared virtual filesystem across `exec()` calls | Implemented | Strong | API tests + curated parity scenarios | One of the main wrapper guarantees. |
 | Per-`exec()` isolated shell state | Implemented | Strong | Curated parity scenarios | Explicitly exercised via env/cwd shell-state scenarios. |
 | `exec()` options: `env`, `replace_env`, `cwd`, `stdin`, `args`, `raw_script`, `timeout` | Implemented | Strong | Curated parity scenarios + generated transcripts | This is one of the best-tested areas. |
@@ -52,17 +52,17 @@ Coverage is only one signal. For this project, the strongest confidence comes fr
 | Sync custom commands | Implemented | Strong | `tests/contracts/test_custom_commands.py`, property tests | Includes nested exec, pipelines, built-in override, non-zero exits, exception mapping. |
 | Async custom commands | Implemented | Moderate | `tests/contracts/test_custom_commands.py` | Core happy paths covered, but not fuzzed or parity-tested. |
 | Command allowlist (`commands=`) | Implemented | Moderate | Curated parity scenario | Covered, but only lightly. |
-| Execution limits (`ExecutionLimits`) | Implemented | Smoke-only | One curated scenario touches `max_command_count` | Most limit fields are wired but not specifically tested. |
-| Python runtime (`python=True`) | Implemented | Smoke-only | `tests/contracts/test_optional_runtimes.py` | One direct happy-path test. |
-| JavaScript runtime (`javascript=True` / `JavaScriptConfig`) | Implemented | Smoke-only | `tests/contracts/test_optional_runtimes.py` | One direct happy-path test. |
-| Network config (`network=`) | Implemented | None | Example + README only | No automated test currently exercises network wiring or command availability. |
-| Virtual process info (`process_info=`) | Implemented | None | Code only | No tests currently assert `/proc`, `$$`, `UID`, etc. |
-| Backend override knobs (`node_command`, `js_entry`, `package_json`) | Implemented | None | Code only | Important escape hatch, but untested. |
-| `Bash.from_options(...)` / `AsyncBash.from_options(...)` | Implemented | None | Code only | Public constructors exist but are not exercised by tests. |
-| Public CLI (`just-py-bash`) | Implemented | Smoke-only | Packaging tests only | Only a basic installed-console-script path is covered. Option parsing is not. |
+| Execution limits (`ExecutionLimits`) | Implemented | Moderate | `tests/parity/test_capability_parity.py`, curated parity scenarios | Loop, heredoc, and output limits are now covered directly; more breadth is still useful. |
+| Python runtime (`python=True`) | Implemented | Moderate | `tests/contracts/test_optional_runtimes.py`, `tests/contracts/test_distributions.py`, `tests/api/test_cli.py` | Direct happy path, timeout-limit behavior, installed-distribution smoke, and CLI enablement are covered. |
+| JavaScript runtime (`javascript=True` / `JavaScriptConfig`) | Implemented | Moderate | `tests/contracts/test_optional_runtimes.py`, `tests/contracts/test_distributions.py` | Direct happy path and installed-distribution smoke are covered. |
+| Network config (`network=`) | Implemented | Moderate | `tests/parity/test_capability_parity.py` | Local HTTP server parity covers command availability, allow-list behavior, methods, and header transforms. |
+| Virtual process info (`process_info=`) | Implemented | Moderate | `tests/parity/test_capability_parity.py` | Differential tests now assert `$$`, `$PPID`, `$UID`, `/proc/self/status`, and `/proc/self/cmdline`. |
+| Backend override knobs (`node_command`, `js_entry`, `package_json`) | Implemented | Moderate | `tests/contracts/test_backend_overrides.py`, `tests/contracts/test_node_provider.py`, API bridge-failure tests | Explicit args and env-var forms are covered, including `JUST_BASH_NODE`. |
+| `Bash.from_options(...)` / `AsyncBash.from_options(...)` | Implemented | Moderate | `tests/api/test_from_options_and_bridge_failures.py` | Both public constructors are now exercised directly. |
+| Public CLI (`just-py-bash`) | Implemented | Moderate | `tests/api/test_cli.py`, packaging tests | Source-level CLI tests now cover `--cwd`, `--python`, `--timeout`, `--version`, stdin piping, and exit-code propagation. |
 | Packaged wheel runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
 | Packaged sdist runtime boot | Implemented | Moderate | `tests/contracts/test_distributions.py` | Good smoke coverage for repo-independent runtime boot. |
-| Packaged runtime for optional Python/JS assets | Implemented by build script | None | Not exercised in installed-wheel/sdist tests | `just_py_bash/tools/build_packaged_runtime.sh` prepares these assets, but distribution tests do not verify them. |
+| Packaged runtime for optional Python/JS assets | Implemented by build script | Moderate | `tests/contracts/test_distributions.py` | Installed wheel/sdist tests now verify packaged Python and JavaScript runtime smoke paths. |
 | Low-level upstream fs classes (`OverlayFs`, `ReadWriteFs`, `MountableFs`) | Not implemented | Planned | N/A | Explicitly called out as missing in README/examples. |
 | Low-level fs API surface (`stat`, `readdir`, `mkdir`, `rm`, etc.) | Not implemented | Planned | N/A | Current Python wrapper only exposes session helpers plus read/write convenience methods. |
 | Upstream `fetch`, `logger`, `trace`, `defenseInDepth`, `coverage` options | Not implemented | Planned | N/A | No Python equivalents yet. |
@@ -131,7 +131,11 @@ Curated scenarios currently cover:
 - binary file round-trips
 - initial files and command allowlists
 - empty-string / empty-list / empty-env transport behavior
-- unicode plus `raw_script` behavior
+- unicode environment transport plus `raw_script` behavior
+- local-network config parity against a test HTTP server
+- `process_info` parity including virtual `/proc` surfaces
+- targeted execution-limit parity for loop, heredoc, and output limits
+- the same curated corpus through `AsyncBash`
 
 Generated transcripts add randomized coverage for:
 
@@ -142,6 +146,7 @@ Generated transcripts add randomized coverage for:
 - cwd overrides
 - argument passthrough
 - final session snapshot consistency
+- the same randomized transcript model through `AsyncBash`
 
 ### Public contract coverage
 
@@ -153,6 +158,9 @@ The public API tests verify:
 - file helper round-trips
 - idempotent `close()` behavior
 - basic async session behavior
+- `Bash.from_options(...)` and `AsyncBash.from_options(...)`
+- CLI behavior for `--cwd`, `--python`, `--timeout`, `--version`, stdin piping, and exit-code propagation
+- bridge unhappy paths including malformed worker responses, worker crashes, backend-unavailable cases, and timeout behavior
 
 ### Capability contract coverage
 
@@ -165,54 +173,40 @@ Contract tests currently verify:
 - non-zero exit-code propagation
 - exception-to-shell-failure mapping
 - async custom commands
+- backend override knobs (`JUST_BASH_NODE`, `JUST_BASH_JS_ENTRY`, `JUST_BASH_PACKAGE_JSON`, explicit args)
 - installed wheel/sdist boot and console-script smoke paths
-- optional Python and JavaScript runtime happy paths
+- installed wheel/sdist smoke for optional Python and JavaScript runtimes
+- optional Python and JavaScript runtime happy paths plus Python timeout-limit behavior
 
 ## What needs improvement
 
 ### 1. Finish test coverage for features that already exist
 
-These are the most valuable near-term additions because they improve confidence without changing the public API.
+The biggest recent improvement was expanding coverage for already-shipped features instead of adding a large new API surface.
 
-#### High priority gaps
+Completed recently:
 
-- **Network config is implemented but untested**
-  - Add a local HTTP server based test so network coverage does not depend on the public internet.
-  - Verify that `curl` is unavailable without `network=` and available when configured.
-  - Verify allow-list, methods, and request-transform behavior.
+- local-network parity tests using a test HTTP server
+- `process_info` parity tests for `$$`, `$PPID`, `$UID`, `/proc`, and cmdline behavior
+- backend override knob tests for explicit args and env vars
+- bridge unhappy-path tests for unavailable backends, malformed worker responses, crashes, timeouts, and close-after-failure
+- broader execution-limit tests
+- source-level CLI option tests
+- installed wheel/sdist runtime tests for Python and JavaScript
+- `from_options(...)` tests for both sync and async
+- async curated and generated differential parity harnesses
+- async failure-path tests
 
-- **`process_info` is implemented but untested**
-  - Add tests for `$$`, `$PPID`, `$UID`, `$EUID`, `/proc/self/status`, and `/proc/self/cmdline`.
-  - Confirm wrapper values reach upstream intact.
-
-- **Backend override knobs are untested**
-  - Add tests for `node_command`, `js_entry`, and `package_json`.
-  - Verify the environment-variable forms too (`JUST_BASH_NODE`, `JUST_BASH_JS_ENTRY`, `JUST_BASH_PACKAGE_JSON`).
-
-- **Bridge unhappy-path behavior is under-tested**
-  - Add tests for `BackendUnavailableError`, `BridgeTimeoutError`, malformed worker responses, worker crashes, and close-after-failure behavior.
-  - Current bridge coverage is the weakest in the repo even though it is the critical integration layer.
-
-#### Medium priority gaps
-
-- **Execution limits need breadth, not just existence**
-  - Add targeted tests for more than `max_command_count`.
-  - At minimum cover loop, output, heredoc, and runtime timeout related limits.
-
-- **CLI coverage is too shallow**
-  - Add tests for `--cwd`, `--python`, `--timeout`, `--version`, stdin piping, and exit-code propagation.
-  - Decide whether the CLI is intentionally minimal or intended to track more of upstream CLI behavior.
-
-- **Async parity should match sync parity quality**
-  - Add a differential async harness that runs the same scenarios through `AsyncBash`.
-  - Right now async support is real, but the deepest parity machinery is sync-only.
-
-- **Installed distribution tests should cover optional runtimes**
-  - The build script packages Python/JS runtime assets, but installed-wheel/sdist tests only run a simple `printf`.
-  - Add installed-distribution tests for `python=True` and `javascript=True`.
+Remaining near-term gaps:
 
 - **Examples are documented but not exercised**
   - Add smoke tests or at least snippet tests for `examples/`.
+
+- **Execution-limit breadth can still improve**
+  - The most important limits now have coverage, but there is still room to add targeted tests for awk/sed/jq/sqlite/JS-specific limits.
+
+- **CLI scope should be clarified explicitly**
+  - We now test the current helper CLI well enough to trust it, but the project should still decide whether that CLI is intentionally minimal or meant to approach upstream CLI parity.
 
 ### 2. Address a few specific code-level issues discovered in review
 
@@ -220,19 +214,17 @@ These are the most valuable near-term additions because they improve confidence 
   - `README.md` previously referenced `docs/wrapping-plan.md`, which did not exist.
   - This roadmap replaces that missing document.
 
-- **`js_entry` package metadata inference is fragile**
-  - `resolve_backend_artifacts()` and the test harness infer `package.json` as `js_entry.parent.parent / "package.json"` when only `js_entry` is given.
-  - That is correct for `dist/index.js`, but not for `dist/bundle/index.js` unless `package_json` is also supplied.
-  - This should be made robust.
+- **`js_entry` package metadata inference was fragile and is now fixed**
+  - `resolve_backend_artifacts()` and the test harness now walk parent directories to find `package.json` when only `js_entry` is supplied.
+  - That makes `dist/bundle/index.js` overrides work without requiring an explicit `package_json` argument.
 
 - **`Bash.__repr__()` performs live bridge I/O**
   - Sync `Bash.__repr__()` calls `get_cwd()` for open sessions.
   - This is surprising for `repr()` and can fail if the worker is unhealthy.
   - Prefer the non-I/O style already used by `AsyncBash.__repr__()`.
 
-- **Public constructors are unevenly exercised**
-  - `from_options(...)` exists for both sync and async APIs but is not tested.
-  - Public exports should either be covered or explicitly de-scoped.
+- **Public constructors were unevenly exercised and are now covered**
+  - `from_options(...)` is now exercised for both sync and async APIs.
 
 ### 3. Expand the current session-oriented API carefully
 
@@ -279,24 +271,24 @@ Recommended order:
 
 - [x] Add a real roadmap document
 - [x] Point README at it
-- [ ] Fix `js_entry` / `package_json` inference for bundle paths
+- [x] Fix `js_entry` / `package_json` inference for bundle paths
 
 ### Phase 1: Test the features we already ship
 
-- [ ] network tests using a local HTTP server
-- [ ] `process_info` tests
-- [ ] backend override knob tests
-- [ ] bridge failure / timeout tests
-- [ ] broader execution-limit tests
-- [ ] CLI option tests
-- [ ] installed-wheel/sdist tests for Python and JavaScript runtimes
-- [ ] `from_options(...)` tests
+- [x] network tests using a local HTTP server
+- [x] `process_info` tests
+- [x] backend override knob tests
+- [x] bridge failure / timeout tests
+- [x] broader execution-limit tests
+- [x] CLI option tests
+- [x] installed-wheel/sdist tests for Python and JavaScript runtimes
+- [x] `from_options(...)` tests
 - [ ] example smoke tests
 
 ### Phase 2: Bring async confidence up to sync confidence
 
-- [ ] async differential parity harness
-- [ ] async failure-path tests
+- [x] async differential parity harness
+- [x] async failure-path tests
 - [ ] async packaging smoke tests if useful
 
 ### Phase 3: Close the largest upstream parity gap
@@ -322,12 +314,12 @@ The project already has a solid and useful core:
 - the packaging story is real
 - parity testing against upstream is already the backbone of confidence
 
-The biggest near-term opportunity is **not** a giant new feature. It is to **finish testing the features that are already present but only lightly covered or not covered at all**, especially:
+The recent test expansion closed most of the highest-value confidence gaps for the current API surface.
 
-- `network`
-- `process_info`
-- backend override knobs
-- bridge error handling
-- installed-distribution optional runtimes
+What remains is now clearer:
 
-Once those are covered, the natural next major roadmap item is support for the missing upstream filesystem classes and `fs=`-based session construction.
+- example smoke coverage
+- a few deeper execution-limit cases
+- an explicit decision about long-term CLI scope
+
+With those confidence gaps mostly addressed, the natural next major roadmap item is support for the missing upstream filesystem classes and `fs=`-based session construction.

@@ -95,6 +95,14 @@ def resolve_node_command(node_command: Sequence[str] | None = None) -> list[str]
     return [node]
 
 
+def infer_package_json_from_js_entry(js_entry_path: Path) -> Path:
+    for parent in js_entry_path.parents:
+        candidate = parent / "package.json"
+        if candidate.exists():
+            return candidate.resolve()
+    return (js_entry_path.parent.parent / "package.json").resolve()
+
+
 def resolve_backend_artifacts(
     *,
     js_entry: str | os.PathLike[str] | None = None,
@@ -105,7 +113,7 @@ def resolve_backend_artifacts(
         package_json_path = (
             Path(package_json).expanduser().resolve()
             if package_json is not None
-            else js_entry_path.parent.parent / "package.json"
+            else infer_package_json_from_js_entry(js_entry_path)
         )
         if not js_entry_path.exists():
             raise BackendUnavailableError(f"just-bash entrypoint not found: {js_entry_path}")

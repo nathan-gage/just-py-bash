@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -38,6 +39,14 @@ def resolve_node_command() -> list[str]:
     return [node]
 
 
+def infer_package_json_from_js_entry(js_entry: Path) -> Path:
+    for parent in js_entry.parents:
+        candidate = parent / "package.json"
+        if candidate.exists():
+            return candidate.resolve()
+    return (js_entry.parent.parent / "package.json").resolve()
+
+
 def resolve_backend_artifacts() -> BackendArtifacts:
     env_js_entry = os.environ.get("JUST_BASH_JS_ENTRY")
     env_package_json = os.environ.get("JUST_BASH_PACKAGE_JSON")
@@ -46,7 +55,7 @@ def resolve_backend_artifacts() -> BackendArtifacts:
         package_json = (
             Path(env_package_json).expanduser().resolve()
             if env_package_json
-            else js_entry.parent.parent / "package.json"
+            else infer_package_json_from_js_entry(js_entry)
         )
         if not js_entry.exists():
             raise AssertionError(f"Configured JS entry does not exist: {js_entry}")
@@ -118,7 +127,21 @@ def execution_limits_to_reference(execution_limits: Any) -> dict[str, int]:
         "max_call_depth": "maxCallDepth",
         "max_command_count": "maxCommandCount",
         "max_loop_iterations": "maxLoopIterations",
+        "max_awk_iterations": "maxAwkIterations",
+        "max_sed_iterations": "maxSedIterations",
+        "max_jq_iterations": "maxJqIterations",
+        "max_sqlite_timeout_ms": "maxSqliteTimeoutMs",
+        "max_python_timeout_ms": "maxPythonTimeoutMs",
+        "max_js_timeout_ms": "maxJsTimeoutMs",
+        "max_glob_operations": "maxGlobOperations",
+        "max_string_length": "maxStringLength",
+        "max_array_elements": "maxArrayElements",
         "max_heredoc_size": "maxHeredocSize",
+        "max_substitution_depth": "maxSubstitutionDepth",
+        "max_brace_expansion_results": "maxBraceExpansionResults",
+        "max_output_size": "maxOutputSize",
+        "max_file_descriptors": "maxFileDescriptors",
+        "max_source_depth": "maxSourceDepth",
     }
     for python_name, wire_name in mapping.items():
         value = getattr(execution_limits, python_name, None)
@@ -329,6 +352,48 @@ def run_python_scenario(
         }
 
 
+def run_async_python_scenario(
+    *,
+    init_kwargs: Mapping[str, Any],
+    operations: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    async def exercise() -> dict[str, Any]:
+        bash_type = public_api().AsyncBash
+        async with bash_type(**dict(init_kwargs)) as bash:
+            results: list[Any] = []
+            for operation in operations:
+                op = operation["op"]
+                try:
+                    if op == "exec":
+                        result = await bash.exec(operation["script"], **dict(operation.get("kwargs", {})))
+                        results.append(wrap_success(normalize_exec_result(result)))
+                    elif op == "read_text":
+                        results.append(wrap_success(await bash.read_text(operation["path"])))
+                    elif op == "read_bytes":
+                        results.append(wrap_success(encode_file_value(await bash.read_bytes(operation["path"]))))
+                    elif op == "write_text":
+                        await bash.write_text(operation["path"], operation["content"])
+                        results.append(wrap_success(None))
+                    elif op == "write_bytes":
+                        await bash.write_bytes(operation["path"], operation["content"])
+                        results.append(wrap_success(None))
+                    elif op == "get_env":
+                        results.append(wrap_success(await bash.get_env()))
+                    elif op == "get_cwd":
+                        results.append(wrap_success(await bash.get_cwd()))
+                    else:  # pragma: no cover - defensive
+                        raise AssertionError(f"unknown op: {op}")
+                except Exception as error:
+                    results.append(normalize_operation_error(error))
+
+            return {
+                "backendVersion": bash.backend_version,
+                "results": results,
+            }
+
+    return asyncio.run(exercise())
+
+
 def run_differential_scenario(
     *,
     init_kwargs: Mapping[str, Any],
@@ -336,6 +401,22 @@ def run_differential_scenario(
     backend_artifacts: BackendArtifacts,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     python_result = run_python_scenario(init_kwargs=init_kwargs, operations=operations)
+    reference_result = run_reference_scenario(
+        js_entry=backend_artifacts.js_entry,
+        package_json=backend_artifacts.package_json,
+        init_options=to_reference_init_options(init_kwargs),
+        operations=[to_reference_operation(operation) for operation in operations],
+    )
+    return python_result, reference_result
+
+
+def run_async_differential_scenario(
+    *,
+    init_kwargs: Mapping[str, Any],
+    operations: Sequence[Mapping[str, Any]],
+    backend_artifacts: BackendArtifacts,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    python_result = run_async_python_scenario(init_kwargs=init_kwargs, operations=operations)
     reference_result = run_reference_scenario(
         js_entry=backend_artifacts.js_entry,
         package_json=backend_artifacts.package_json,
@@ -369,8 +450,11 @@ __all__ = [
     "normalize_exec_result",
     "normalize_operation_error",
     "session_snapshot_operations",
+    "infer_package_json_from_js_entry",
     "resolve_backend_artifacts",
     "resolve_node_command",
+    "run_async_differential_scenario",
+    "run_async_python_scenario",
     "run_differential_scenario",
     "run_python_scenario",
     "run_reference_scenario",
