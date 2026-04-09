@@ -9,6 +9,7 @@ from tests.support.harness import (
     BackendArtifacts,
     op_exec,
     op_get_cwd,
+    op_get_env,
     op_read_bytes,
     op_read_text,
     op_write_bytes,
@@ -45,6 +46,13 @@ def make_initial_files_and_command_allowlist_session() -> dict[str, Any]:
 
 def make_empty_values_are_transported_exactly_session() -> dict[str, Any]:
     return {"cwd": "/workspace", "env": {"BASE": "root"}}
+
+
+def make_unicode_environment_round_trip_session() -> dict[str, Any]:
+    return {
+        "cwd": "/workspace",
+        "env": {"ALPHA": "ō", "ONLY": "\x80"},
+    }
 
 
 def make_unicode_and_raw_script_round_trip_session() -> dict[str, Any]:
@@ -107,6 +115,13 @@ CURATED_SCENARIOS: list[CuratedScenario] = [
                 env={},
             ),
             op_exec("printf '%s|%s|%s' foo", args=[]),
+        ],
+    ),
+    (
+        "unicode_environment_round_trip",
+        make_unicode_environment_round_trip_session,
+        [
+            op_get_env(),
         ],
     ),
     (

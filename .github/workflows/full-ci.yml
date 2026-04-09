@@ -382,9 +382,6 @@ jobs:
         include:
           - os: ubuntu-latest
             python-version: "3.11"
-            node-version: "20"
-          - os: ubuntu-latest
-            python-version: "3.11"
             node-version: "24"
           - os: ubuntu-latest
             python-version: "3.12"

@@ -243,6 +243,7 @@ def run_reference_scenario(
         [*resolve_node_command(), str(REFERENCE_SCRIPT)],
         input=json.dumps(request),
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=False,
     )
