@@ -35,6 +35,32 @@ class BackendArtifacts:
 
 
 ReferenceLazyFileProvider = Callable[[], str | bytes | Awaitable[str | bytes]]
+ReferenceFetchCallback = Callable[[Any], Any | Awaitable[Any]]
+ReferenceTraceCallback = Callable[[Any], Any | Awaitable[Any]]
+ReferenceDefenseViolationCallback = Callable[[Any], Any | Awaitable[Any]]
+
+
+@dataclass(slots=True)
+class ReferenceBridgeHooks:
+    lazy_file_providers: dict[str, ReferenceLazyFileProvider]
+    fetch_callback: ReferenceFetchCallback | None = None
+    logger: Any = None
+    trace_callback: ReferenceTraceCallback | None = None
+    coverage_writer: Any = None
+    defense_violation_callback: ReferenceDefenseViolationCallback | None = None
+    force_interactive: bool = False
+
+    @property
+    def requires_interactive(self) -> bool:
+        return (
+            self.force_interactive
+            or bool(self.lazy_file_providers)
+            or self.fetch_callback is not None
+            or self.logger is not None
+            or self.trace_callback is not None
+            or self.coverage_writer is not None
+            or self.defense_violation_callback is not None
+        )
 
 
 class _ReferenceLazyFileRegistry:
@@ -53,10 +79,37 @@ async def _await_reference_lazy_file_result(result: Awaitable[object]) -> str | 
     return _coerce_reference_lazy_file_content(await result)
 
 
+async def _await_reference_callback_result(result: Awaitable[object]) -> object:
+    return await result
+
+
 def _coerce_reference_lazy_file_content(value: object) -> str | bytes:
     if isinstance(value, str | bytes):
         return value
     raise TypeError("Lazy file providers must return str, bytes, or an awaitable of either")
+
+
+def _reference_fetch_result_to_wire(value: object) -> dict[str, object]:
+    if isinstance(value, Mapping):
+        mapping = cast(Mapping[object, object], value)
+        headers = mapping.get("headers")
+        status = mapping.get("status", 0)
+        return {
+            "status": int(status) if isinstance(status, (int, str)) else 0,
+            "statusText": str(mapping.get("statusText", "")),
+            "headers": dict(cast(Mapping[str, object], headers)) if isinstance(headers, Mapping) else {},
+            "body": str(mapping.get("body", "")),
+            "url": str(mapping.get("url", "")),
+        }
+
+    headers = getattr(value, "headers", {})
+    return {
+        "status": int(getattr(value, "status", 0)),
+        "statusText": str(getattr(value, "status_text", "")),
+        "headers": dict(cast(Mapping[str, object], headers)) if isinstance(headers, Mapping) else {},
+        "body": str(getattr(value, "body", "")),
+        "url": str(getattr(value, "url", "")),
+    }
 
 
 def split_command_string(command: str) -> list[str]:
@@ -232,6 +285,28 @@ def javascript_config_to_reference(config: Any) -> bool | dict[str, str]:
     return payload
 
 
+def _encode_reference_defense_in_depth(
+    config: Any,
+) -> tuple[bool | dict[str, object], ReferenceDefenseViolationCallback | None]:
+    api = public_api()
+    if isinstance(config, bool):
+        return config, None
+
+    if isinstance(config, api.DefenseInDepthConfig):
+        payload: dict[str, object] = {}
+        if config.enabled is not None:
+            payload["enabled"] = config.enabled
+        if config.audit_mode is not None:
+            payload["auditMode"] = config.audit_mode
+        if config.exclude_violation_types is not None:
+            payload["excludeViolationTypes"] = [str(value) for value in config.exclude_violation_types]
+        if config.on_violation is not None:
+            payload["onViolationEnabled"] = True
+        return payload, config.on_violation
+
+    raise AssertionError(f"Unsupported defense_in_depth value for reference harness: {config!r}")
+
+
 def _encode_datetime_ms(value: datetime) -> int:
     normalized = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
     return int(normalized.astimezone(UTC).timestamp() * 1000)
@@ -337,7 +412,7 @@ def _encode_reference_filesystem(
 
 def to_reference_bridge_init(
     init_kwargs: Mapping[str, Any],
-) -> tuple[dict[str, Any], dict[str, ReferenceLazyFileProvider]]:
+) -> tuple[dict[str, Any], ReferenceBridgeHooks]:
     payload: dict[str, Any] = {}
     registry = _ReferenceLazyFileRegistry()
 
@@ -372,6 +447,28 @@ def to_reference_bridge_init(
     if execution_limits is not None:
         payload["executionLimits"] = execution_limits_to_reference(execution_limits)
 
+    fetch = init_kwargs.get("fetch")
+    if fetch is not None:
+        payload["fetchEnabled"] = True
+
+    logger = init_kwargs.get("logger")
+    if logger is not None:
+        payload["loggerEnabled"] = True
+
+    trace = init_kwargs.get("trace")
+    if trace is not None:
+        payload["traceEnabled"] = True
+
+    coverage = init_kwargs.get("coverage")
+    if coverage is not None:
+        payload["coverageEnabled"] = True
+
+    defense_in_depth = init_kwargs.get("defense_in_depth")
+    defense_violation_callback: ReferenceDefenseViolationCallback | None = None
+    if defense_in_depth is not None:
+        encoded_defense, defense_violation_callback = _encode_reference_defense_in_depth(defense_in_depth)
+        payload["defenseInDepth"] = encoded_defense
+
     network = init_kwargs.get("network")
     if network is not None:
         payload["network"] = dict(network)
@@ -380,13 +477,21 @@ def to_reference_bridge_init(
     if process_info is not None:
         payload["processInfo"] = dict(process_info)
 
-    return payload, dict(registry.providers)
+    return payload, ReferenceBridgeHooks(
+        lazy_file_providers=dict(registry.providers),
+        fetch_callback=fetch,
+        logger=logger,
+        trace_callback=trace,
+        coverage_writer=coverage,
+        defense_violation_callback=defense_violation_callback,
+        force_interactive=defense_in_depth is not None,
+    )
 
 
 def to_reference_init_options(init_kwargs: Mapping[str, Any]) -> dict[str, Any]:
-    payload, lazy_file_providers = to_reference_bridge_init(init_kwargs)
-    if lazy_file_providers:
-        raise AssertionError("reference harness does not support callable lazy file providers")
+    payload, hooks = to_reference_bridge_init(init_kwargs)
+    if hooks.requires_interactive:
+        raise AssertionError("reference harness does not support interactive callback-backed option hooks")
     return payload
 
 
@@ -446,13 +551,13 @@ class _InteractiveReferenceScenario:
         package_json: Path,
         init_options: Mapping[str, Any],
         operations: Sequence[Mapping[str, Any]],
-        lazy_file_providers: Mapping[str, ReferenceLazyFileProvider],
+        hooks: ReferenceBridgeHooks,
     ) -> None:
         self._js_entry = js_entry
         self._package_json = package_json
         self._init_options = dict(init_options)
         self._operations = [dict(operation) for operation in operations]
-        self._lazy_file_providers = dict(lazy_file_providers)
+        self._hooks = hooks
         self._proc: subprocess.Popen[str] | None = None
         self._stderr_tail: list[str] = []
         self._stderr_thread: threading.Thread | None = None
@@ -506,6 +611,21 @@ class _InteractiveReferenceScenario:
                 if message.get("type") == "lazy_file":
                     self._handle_lazy_file(message)
                     continue
+                if message.get("type") == "fetch":
+                    self._handle_fetch(message)
+                    continue
+                if message.get("type") == "logger":
+                    self._handle_logger(message)
+                    continue
+                if message.get("type") == "trace":
+                    self._handle_trace(message)
+                    continue
+                if message.get("type") == "coverage":
+                    self._handle_coverage(message)
+                    continue
+                if message.get("type") == "defense_violation":
+                    self._handle_defense_violation(message)
+                    continue
 
                 if message.get("id") != 1:
                     raise AssertionError(f"interactive reference harness returned an unexpected message: {message!r}")
@@ -543,7 +663,7 @@ class _InteractiveReferenceScenario:
         if not isinstance(invocation_id, int) or not isinstance(provider_name, str):
             raise AssertionError(f"interactive reference harness emitted an invalid lazy file event: {event!r}")
 
-        provider = self._lazy_file_providers.get(provider_name)
+        provider = self._hooks.lazy_file_providers.get(provider_name)
         if provider is None:
             self._send_line(
                 {
@@ -573,6 +693,93 @@ class _InteractiveReferenceScenario:
             }
 
         self._send_line(completion_payload)
+
+    def _handle_fetch(self, event: Mapping[str, object]) -> None:
+        invocation_id = event.get("invocationId")
+        if not isinstance(invocation_id, int):
+            raise AssertionError(f"interactive reference harness emitted an invalid fetch event: {event!r}")
+
+        callback = self._hooks.fetch_callback
+        if callback is None:
+            self._send_line(
+                {
+                    "op": "fetch_complete",
+                    "invocationId": invocation_id,
+                    "error": {"message": "No fetch callback configured"},
+                },
+            )
+            return
+
+        api = public_api()
+        try:
+            request = api.FetchRequest.from_wire(str(event.get("url", "")), event.get("options"))
+            raw_result: object = callback(request)
+            if inspect.isawaitable(raw_result):
+                resolved = asyncio.run(_await_reference_callback_result(raw_result))
+            else:
+                resolved = raw_result
+            completion_payload: dict[str, object] = {
+                "op": "fetch_complete",
+                "invocationId": invocation_id,
+                "result": _reference_fetch_result_to_wire(resolved),
+            }
+        except Exception as exc:
+            completion_payload = {
+                "op": "fetch_complete",
+                "invocationId": invocation_id,
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            }
+
+        self._send_line(completion_payload)
+
+    def _handle_logger(self, event: Mapping[str, object]) -> None:
+        logger = self._hooks.logger
+        if logger is None:
+            return
+        level = event.get("level", "info")
+        if not isinstance(level, str):
+            raise AssertionError(f"interactive reference harness emitted an invalid logger event: {event!r}")
+        method = getattr(logger, level, None)
+        if not callable(method):
+            return
+        result = method(str(event.get("message", "")), event.get("data"))
+        if inspect.isawaitable(result):
+            asyncio.run(_await_reference_callback_result(result))
+
+    def _handle_trace(self, event: Mapping[str, object]) -> None:
+        callback = self._hooks.trace_callback
+        if callback is None:
+            return
+        payload = event.get("event")
+        if not isinstance(payload, Mapping):
+            raise AssertionError(f"interactive reference harness emitted an invalid trace event: {event!r}")
+        api = public_api()
+        result = callback(api.TraceEvent.from_wire(cast(Mapping[str, object], payload)))
+        if inspect.isawaitable(result):
+            asyncio.run(_await_reference_callback_result(result))
+
+    def _handle_coverage(self, event: Mapping[str, object]) -> None:
+        writer = self._hooks.coverage_writer
+        if writer is None:
+            return
+        hit = getattr(writer, "hit", None)
+        if not callable(hit):
+            return
+        result = hit(str(event.get("feature", "")))
+        if inspect.isawaitable(result):
+            asyncio.run(_await_reference_callback_result(result))
+
+    def _handle_defense_violation(self, event: Mapping[str, object]) -> None:
+        callback = self._hooks.defense_violation_callback
+        if callback is None:
+            return
+        payload = event.get("violation")
+        if not isinstance(payload, Mapping):
+            raise AssertionError(f"interactive reference harness emitted an invalid defense violation event: {event!r}")
+        api = public_api()
+        result = callback(api.SecurityViolation.from_wire(cast(Mapping[str, object], payload)))
+        if inspect.isawaitable(result):
+            asyncio.run(_await_reference_callback_result(result))
 
     def _read_stderr(self) -> None:
         proc = self._proc
@@ -635,15 +842,16 @@ def run_reference_scenario(
     package_json: Path,
     init_options: Mapping[str, Any] | None = None,
     operations: Sequence[Mapping[str, Any]],
-    lazy_file_providers: Mapping[str, ReferenceLazyFileProvider] | None = None,
+    hooks: ReferenceBridgeHooks | None = None,
 ) -> dict[str, Any]:
-    if lazy_file_providers:
+    effective_hooks = hooks or ReferenceBridgeHooks(lazy_file_providers={})
+    if effective_hooks.requires_interactive:
         return _InteractiveReferenceScenario(
             js_entry=js_entry,
             package_json=package_json,
             init_options=init_options or {},
             operations=operations,
-            lazy_file_providers=lazy_file_providers,
+            hooks=effective_hooks,
         ).run()
 
     request = {
@@ -912,7 +1120,7 @@ def run_differential_scenario(
     reference_init_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     python_result = run_python_scenario(init_kwargs=init_kwargs, operations=operations)
-    reference_options, reference_lazy_file_providers = to_reference_bridge_init(
+    reference_options, reference_hooks = to_reference_bridge_init(
         init_kwargs if reference_init_kwargs is None else reference_init_kwargs,
     )
     reference_result = run_reference_scenario(
@@ -920,7 +1128,7 @@ def run_differential_scenario(
         package_json=backend_artifacts.package_json,
         init_options=reference_options,
         operations=[to_reference_operation(operation) for operation in operations],
-        lazy_file_providers=reference_lazy_file_providers,
+        hooks=reference_hooks,
     )
     return python_result, reference_result
 
@@ -933,7 +1141,7 @@ def run_async_differential_scenario(
     reference_init_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     python_result = run_async_python_scenario(init_kwargs=init_kwargs, operations=operations)
-    reference_options, reference_lazy_file_providers = to_reference_bridge_init(
+    reference_options, reference_hooks = to_reference_bridge_init(
         init_kwargs if reference_init_kwargs is None else reference_init_kwargs,
     )
     reference_result = run_reference_scenario(
@@ -941,7 +1149,7 @@ def run_async_differential_scenario(
         package_json=backend_artifacts.package_json,
         init_options=reference_options,
         operations=[to_reference_operation(operation) for operation in operations],
-        lazy_file_providers=reference_lazy_file_providers,
+        hooks=reference_hooks,
     )
     return python_result, reference_result
 

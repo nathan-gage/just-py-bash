@@ -8,6 +8,7 @@ from ._bridge import NodeBridge
 from ._custom_commands import CustomCommands
 from ._fs import FileSystemConfig, InitialFileValue
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
+from ._option_hooks import BashLogger, DefenseInDepthConfig, FeatureCoverageWriter, FetchCallback, TraceCallback
 from ._options import BashOptions, ExecOptions
 from ._session_fs import SessionFs
 from ._types import NetworkConfig, ProcessInfo
@@ -36,6 +37,11 @@ class Bash:
         javascript: bool | JavaScriptConfig = False,
         commands: Sequence[str] | None = None,
         custom_commands: CustomCommands | None = None,
+        fetch: FetchCallback | None = None,
+        logger: BashLogger | None = None,
+        trace: TraceCallback | None = None,
+        defense_in_depth: bool | DefenseInDepthConfig | None = None,
+        coverage: FeatureCoverageWriter | None = None,
         network: NetworkConfig | None = None,
         process_info: ProcessInfo | None = None,
         node_command: Sequence[str] | None = None,
@@ -53,6 +59,11 @@ class Bash:
                 javascript=javascript,
                 commands=commands,
                 custom_commands=custom_commands,
+                fetch=fetch,
+                logger=logger,
+                trace=trace,
+                defense_in_depth=defense_in_depth,
+                coverage=coverage,
                 network=network,
                 process_info=process_info,
             ),
@@ -87,11 +98,16 @@ class Bash:
         js_entry: str | os.PathLike[str] | None,
         package_json: str | os.PathLike[str] | None,
     ) -> None:
-        init_options, lazy_file_providers = options.to_bridge_init()
+        init_options, hooks = options.to_bridge_init()
         self._bridge = NodeBridge(
             init_options=init_options,
             custom_commands=options.custom_commands,
-            lazy_file_providers=lazy_file_providers,
+            lazy_file_providers=hooks.lazy_file_providers,
+            fetch_callback=hooks.fetch_callback,
+            logger=hooks.logger,
+            trace_callback=hooks.trace_callback,
+            coverage_writer=hooks.coverage_writer,
+            defense_violation_callback=hooks.defense_violation_callback,
             node_command=node_command,
             js_entry=js_entry,
             package_json=package_json,

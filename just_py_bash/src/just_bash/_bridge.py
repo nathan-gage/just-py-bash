@@ -19,14 +19,19 @@ from hashlib import sha256
 from itertools import count
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Any, Literal, overload
+from typing import Any, Literal, cast, overload
 
 from ._bridge_protocol import (
     DEFAULT_TIMEOUT_SECONDS,
     BridgeOperation,
     parse_backend_error,
+    parse_coverage_event,
     parse_custom_command_event,
+    parse_defense_violation_event,
+    parse_fetch_event,
     parse_lazy_file_event,
+    parse_logger_event,
+    parse_trace_event,
     parse_worker_message,
     parse_worker_response,
 )
@@ -35,15 +40,31 @@ from ._custom_commands import CustomCommandContext, CustomCommandHandlers, comma
 from ._exceptions import BackendError, BackendUnavailableError, BridgeError, BridgeTimeoutError
 from ._fs import LazyFileProvider
 from ._node_provider import resolve_bundled_node_command
+from ._option_hooks import (
+    BashLogger,
+    DefenseViolationCallback,
+    FeatureCoverageWriter,
+    FetchCallback,
+    FetchRequest,
+    FetchReturn,
+    SecurityViolation,
+    TraceCallback,
+    TraceEvent,
+    normalize_fetch_result,
+)
 from ._types import (
     BytesPayload,
     ChmodRequestPayload,
+    CoverageEvent,
     CpRequestPayload,
     CustomCommandCompleteRequestPayload,
     CustomCommandEvent,
     CustomCommandExecRequestPayload,
+    DefenseViolationEvent,
     ExecRequestPayload,
     ExecResultWire,
+    FetchCompleteRequestPayload,
+    FetchEvent,
     FsStatWire,
     InfoResponse,
     InitOptionsWire,
@@ -51,10 +72,12 @@ from ._types import (
     InitResponse,
     LazyFileCompleteRequestPayload,
     LazyFileEvent,
+    LoggerEvent,
     MkdirRequestPayload,
     PathPairRequestPayload,
     PathRequestPayload,
     RmRequestPayload,
+    TraceEventMessage,
     WorkerResponse,
     WriteBytesRequestPayload,
     WriteTextRequestPayload,
@@ -201,6 +224,10 @@ async def _await_lazy_file_result(result: Awaitable[str | bytes]) -> str | bytes
     return await result
 
 
+async def _await_fetch_result(result: Awaitable[object]) -> object:
+    return await result
+
+
 def _coerce_lazy_file_content(value: object) -> str | bytes:
     if not isinstance(value, (str, bytes)):
         raise TypeError("Lazy file providers must return str, bytes, or an awaitable of either")
@@ -218,6 +245,11 @@ class NodeBridge:
         init_options: InitOptionsWire,
         custom_commands: CustomCommandHandlers | None = None,
         lazy_file_providers: Mapping[str, LazyFileProvider] | None = None,
+        fetch_callback: FetchCallback | None = None,
+        logger: BashLogger | None = None,
+        trace_callback: TraceCallback | None = None,
+        coverage_writer: FeatureCoverageWriter | None = None,
+        defense_violation_callback: DefenseViolationCallback | None = None,
         node_command: Sequence[str] | None = None,
         js_entry: str | os.PathLike[str] | None = None,
         package_json: str | os.PathLike[str] | None = None,
@@ -236,6 +268,11 @@ class NodeBridge:
         self._pending: dict[int, Queue[WorkerResponse | BaseException]] = {}
         self._custom_commands = dict(custom_commands or {})
         self._lazy_file_providers = dict(lazy_file_providers or {})
+        self._fetch_callback = fetch_callback
+        self._logger = logger
+        self._trace_callback = trace_callback
+        self._coverage_writer = coverage_writer
+        self._defense_violation_callback = defense_violation_callback
 
         command = [*resolve_node_command(node_command), str(write_worker_file())]
 
@@ -316,6 +353,8 @@ class NodeBridge:
         NodeBridge._close_process_pipes(proc)
 
     def close(self) -> None:
+        current_thread = threading.current_thread()
+
         with self._close_lock:
             if self._closed:
                 return
@@ -323,8 +362,10 @@ class NodeBridge:
 
             self._fail_all_pending(BridgeError("just-bash bridge closed"))
             self._finalize_process(self._proc, wait_timeout=2.0)
-            self._stdout_thread.join(timeout=0.2)
-            self._stderr_thread.join(timeout=0.2)
+            if self._stdout_thread is not current_thread:
+                self._stdout_thread.join(timeout=0.2)
+            if self._stderr_thread is not current_thread:
+                self._stderr_thread.join(timeout=0.2)
             self._finalizer.detach()
 
     @overload
@@ -510,6 +551,15 @@ class NodeBridge:
     @overload
     def request(
         self,
+        op: Literal["fetch_complete"],
+        payload: FetchCompleteRequestPayload,
+        *,
+        timeout: float | None = None,
+    ) -> None: ...
+
+    @overload
+    def request(
+        self,
         op: Literal["get_env"],
         payload: None = None,
         *,
@@ -605,9 +655,30 @@ class NodeBridge:
                     lazy_file_event = parse_lazy_file_event(message)
                     self._dispatch_lazy_file(lazy_file_event)
                     continue
+                if message.get("type") == "fetch":
+                    fetch_event = parse_fetch_event(message)
+                    self._dispatch_fetch(fetch_event)
+                    continue
+                if message.get("type") == "logger":
+                    logger_event = parse_logger_event(message)
+                    self._handle_logger(logger_event)
+                    continue
+                if message.get("type") == "trace":
+                    trace_event = parse_trace_event(message)
+                    self._handle_trace(trace_event)
+                    continue
+                if message.get("type") == "coverage":
+                    coverage_event = parse_coverage_event(message)
+                    self._handle_coverage(coverage_event)
+                    continue
+                if message.get("type") == "defense_violation":
+                    defense_violation_event = parse_defense_violation_event(message)
+                    self._handle_defense_violation(defense_violation_event)
+                    continue
                 response = parse_worker_response(message)
-            except BridgeError as exc:
+            except Exception as exc:
                 self._fail_all_pending(exc)
+                self.close()
                 return
 
             with self._pending_lock:
@@ -699,6 +770,81 @@ class NodeBridge:
             )
         except Exception:
             self.close()
+
+    def _dispatch_fetch(self, event: FetchEvent) -> None:
+        thread = threading.Thread(
+            target=self._handle_fetch,
+            args=(event,),
+            name=f"just-py-bash-fetch-{event['invocationId']}",
+            daemon=True,
+        )
+        thread.start()
+
+    def _handle_fetch(self, event: FetchEvent) -> None:
+        callback = self._fetch_callback
+        if callback is None:
+            completion_payload: FetchCompleteRequestPayload = {
+                "invocationId": event["invocationId"],
+                "error": {"message": "No fetch callback configured"},
+            }
+        else:
+            try:
+                request = FetchRequest.from_wire(event["url"], event.get("options"))
+                raw_result: object = callback(request)
+                if inspect.isawaitable(raw_result):
+                    resolved = asyncio.run(_await_fetch_result(raw_result))
+                else:
+                    resolved = raw_result
+                completion_payload = {
+                    "invocationId": event["invocationId"],
+                    "result": normalize_fetch_result(cast(FetchReturn, resolved)).to_wire(),
+                }
+            except Exception as exc:  # pragma: no cover - exercised via public api tests
+                completion_payload = {
+                    "invocationId": event["invocationId"],
+                    "error": {"type": type(exc).__name__, "message": str(exc)},
+                }
+
+        try:
+            self.request("fetch_complete", completion_payload, timeout=DEFAULT_TIMEOUT_SECONDS)
+        except Exception:
+            self.close()
+
+    def _handle_logger(self, event: LoggerEvent) -> None:
+        logger = self._logger
+        if logger is None:
+            return
+        method_name = event.get("level", "info")
+        method = getattr(logger, method_name, None)
+        if not callable(method):
+            return
+        result = method(event.get("message", ""), event.get("data"))
+        if inspect.isawaitable(result):
+            asyncio.run(_await_fetch_result(result))
+
+    def _handle_trace(self, event: TraceEventMessage) -> None:
+        callback = self._trace_callback
+        if callback is None:
+            return
+        result = callback(TraceEvent.from_wire(event["event"]))
+        if inspect.isawaitable(result):
+            asyncio.run(_await_fetch_result(result))
+
+    def _handle_coverage(self, event: CoverageEvent) -> None:
+        writer = self._coverage_writer
+        if writer is None:
+            return
+        result = writer.hit(event["feature"])
+        if inspect.isawaitable(result):
+            asyncio.run(_await_fetch_result(result))
+
+    def _handle_defense_violation(self, event: DefenseViolationEvent) -> None:
+        callback = self._defense_violation_callback
+        if callback is None:
+            return
+        result = callback(SecurityViolation.from_wire(event["violation"]))
+        if inspect.isawaitable(result):
+            asyncio.run(_await_fetch_result(result))
 
     def _read_stderr(self) -> None:
         stderr = self._proc.stderr

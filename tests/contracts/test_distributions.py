@@ -229,6 +229,89 @@ def assert_installed_session_fs_api_and_richer_initial_files_work(
     assert {"copy.txt", "docs", "lazy.txt", "link.txt", "meta.txt"} <= set(payload["listing"])
 
 
+def assert_installed_option_hooks_work(installed: InstalledDistribution, *, label: str) -> None:
+    completed = run_installed_python(
+        installed,
+        (
+            "import json\n"
+            "from just_bash import Bash\n"
+            "class Logger:\n"
+            "    def __init__(self):\n"
+            "        self.events = []\n"
+            "    def info(self, message, data=None):\n"
+            "        self.events.append(['info', message])\n"
+            "    def debug(self, message, data=None):\n"
+            "        self.events.append(['debug', message])\n"
+            "class Coverage:\n"
+            "    def __init__(self):\n"
+            "        self.hits = []\n"
+            "    def hit(self, feature):\n"
+            "        self.hits.append(feature)\n"
+            "logger = Logger()\n"
+            "coverage = Coverage()\n"
+            "traces = []\n"
+            "requests = []\n"
+            "def trace(event):\n"
+            "    traces.append(event.category)\n"
+            "def fetch(request):\n"
+            "    requests.append({\n"
+            "        'url': request.url,\n"
+            "        'method': request.method,\n"
+            "        'headers': dict(request.headers),\n"
+            "        'body': request.body,\n"
+            "    })\n"
+            "    return {\n"
+            "        'status': 200,\n"
+            "        'statusText': 'OK',\n"
+            "        'headers': {'content-type': 'text/plain'},\n"
+            "        'body': 'option-hooks\\n',\n"
+            "        'url': request.url,\n"
+            "    }\n"
+            "with Bash(\n"
+            "    files={'/workspace/a.txt': 'a\\n'},\n"
+            "    cwd='/workspace',\n"
+            "    logger=logger,\n"
+            "    trace=trace,\n"
+            "    fetch=fetch,\n"
+            ") as bash:\n"
+            "    fetch_result = bash.exec('curl -s https://example.com/api')\n"
+            "    find_result = bash.exec('find . -maxdepth 1 -type f | sort')\n"
+            "with Bash(coverage=coverage) as bash:\n"
+            "    coverage_result = bash.exec('true')\n"
+            "payload = {\n"
+            "    'fetch_stdout': fetch_result.stdout,\n"
+            "    'find_stdout': find_result.stdout,\n"
+            "    'coverage_exit': coverage_result.exit_code,\n"
+            "    'requests': requests,\n"
+            "    'logger_messages': logger.events,\n"
+            "    'trace_categories': traces,\n"
+            "    'coverage_hits': coverage.hits,\n"
+            "}\n"
+            "print(json.dumps(payload))\n"
+        ),
+    )
+    assert_packaged_runtime_available(completed, label=label)
+    payload = json.loads(completed.stdout)
+    assert payload["fetch_stdout"] == "option-hooks\n"
+    assert payload["find_stdout"] == "./a.txt\n"
+    assert payload["coverage_exit"] == 0
+    assert payload["requests"] == [
+        {
+            "url": "https://example.com/api",
+            "method": "GET",
+            "headers": {},
+            "body": None,
+        }
+    ]
+    logger_messages = [tuple(item) for item in payload["logger_messages"]]
+    assert ("info", "exec") in logger_messages
+    assert ("debug", "stdout") in logger_messages
+    assert ("info", "exit") in logger_messages
+    assert "find" in payload["trace_categories"]
+    assert payload["coverage_hits"]
+    assert any(hit.startswith("bash:") or hit.startswith("cmd:") for hit in payload["coverage_hits"])
+
+
 @pytest.fixture(scope="module")
 def installed_wheel() -> InstalledDistribution:
     root = Path(tempfile.mkdtemp(prefix="just-py-bash-installed-wheel-"))
@@ -304,6 +387,10 @@ def test_installed_wheel_supports_session_fs_api_and_richer_initial_files(
     )
 
 
+def test_installed_wheel_supports_option_hooks(installed_wheel: InstalledDistribution) -> None:
+    assert_installed_option_hooks_work(installed_wheel, label="installed wheel option hooks test")
+
+
 def test_installed_wheel_supports_optional_python_and_javascript_runtimes(
     installed_wheel: InstalledDistribution,
 ) -> None:
@@ -346,6 +433,10 @@ def test_installed_sdist_supports_session_fs_api_and_richer_initial_files(
         installed_sdist,
         label="installed sdist session fs API test",
     )
+
+
+def test_installed_sdist_supports_option_hooks(installed_sdist: InstalledDistribution) -> None:
+    assert_installed_option_hooks_work(installed_sdist, label="installed sdist option hooks test")
 
 
 def test_installed_sdist_supports_optional_python_and_javascript_runtimes(
