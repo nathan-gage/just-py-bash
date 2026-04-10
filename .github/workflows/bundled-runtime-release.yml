@@ -141,7 +141,7 @@ jobs:
           PY
 
       - name: Upload bundled runtime wheel artifact
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: bundled-runtime-${{ matrix.os }}
           path: dist-node/*

@@ -63,7 +63,7 @@ jobs:
           printf '%s\n' "$GITHUB_SHA" > .ci/backend-artifact/github_sha.txt
 
       - name: Upload backend assets
-        uses: actions/upload-artifact@v6.0.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: backend-assets
           compression-level: 0
