@@ -535,7 +535,15 @@ jobs:
               handle.write(f'JUST_BASH_TEST_PACKAGED_PACKAGE_JSON={package_json}\n')
 
       - name: Run non-packaging test suite
+        if: matrix.os != 'windows-latest'
         shell: bash
+        run: COLUMNS=150 uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
+
+      - name: Run non-packaging test suite (Windows, 4 workers)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          PYTEST_XDIST_AUTO_NUM_WORKERS: "4"
         run: COLUMNS=150 uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
 
   bundled-runtime-packaging:
