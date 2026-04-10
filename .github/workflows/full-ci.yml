@@ -299,6 +299,10 @@ jobs:
           name: bundled-runtime-assets-ubuntu
           path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
 
+      - name: Restore bundled runtime executable permissions
+        shell: bash
+        run: chmod +x just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/bin/node
+
       - name: Run full CI check suite
         run: make all-ci
 
@@ -338,6 +342,10 @@ jobs:
         with:
           name: bundled-runtime-assets-ubuntu
           path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
+
+      - name: Restore bundled runtime executable permissions
+        shell: bash
+        run: chmod +x just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/bin/node
 
       - name: Download backend assets
         uses: actions/download-artifact@v8.0.1
@@ -564,6 +572,11 @@ jobs:
         with:
           name: bundled-runtime-assets-ubuntu
           path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
+
+      - name: Restore bundled runtime executable permissions
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: chmod +x just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/bin/node
 
       - name: Restore cached bundled runtime payload
         if: matrix.os != 'ubuntu-latest'
