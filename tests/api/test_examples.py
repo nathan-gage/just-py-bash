@@ -25,23 +25,20 @@ CASES = [
     ExampleCase(
         script=Path("examples/quickstart_sync.py"),
         required_fragments=(
-            "cat hello.txt",
-            "hello from just-py-bash",
-            "ls -1",
-            "hello.txt",
-            "note.txt",
+            "shell state resets, filesystem persists",
+            "name=missing cwd=/workspace file=hello from the shared filesystem",
             "read_text('note.txt')",
-            "written from Python",
+            "written via bash.fs",
         ),
     ),
     ExampleCase(
         script=Path("examples/quickstart_async.py"),
         required_fragments=(
-            "cat note.txt",
-            "hello from async just-py-bash",
-            "cwd=/workspace",
+            "shell state resets, filesystem persists",
+            "name=missing cwd=/workspace file=hello from async shared filesystem",
+            "read_text('note.txt')",
+            "written via async bash.fs",
         ),
-        required_patterns=(r"env vars available=\d+",),
     ),
     ExampleCase(
         script=Path("examples/custom_commands_sync.py"),
@@ -69,6 +66,8 @@ CASES = [
             "=== Per-exec env and cwd overrides ===",
             "hello from /workspace",
             "override from /tmp",
+            "=== replace_env ===",
+            "this / unset",
             "=== stdin and args ===",
             "hello from stdin",
             "2:beta",
@@ -81,6 +80,41 @@ CASES = [
             r"(^10$|python unavailable in this backend build:)",
             r"(^bootstrapped:5$|js-exec unavailable in this backend build:)",
         ),
+    ),
+    ExampleCase(
+        script=Path("examples/filesystem_surfaces.py"),
+        required_fragments=(
+            "=== Filesystem surfaces ===",
+            "exists(meta.txt)=True",
+            "mode=0o640",
+            "mtime=2024-01-02T03:04:05+00:00",
+            "lazy=lazy content",
+            "link=copy.txt",
+            "copy=from bash.fs",
+        ),
+        required_patterns=(r"realpath=.*/copy\.txt",),
+    ),
+    ExampleCase(
+        script=Path("examples/network_access.py"),
+        required_fragments=(
+            "=== Network access ===",
+            "GET /inspect from-network-config",
+            "POST alpha=beta",
+        ),
+    ),
+    ExampleCase(
+        script=Path("examples/option_hooks.py"),
+        required_fragments=(
+            "=== Option hooks ===",
+            "fetch=hello from fetch",
+            "fetch_request=GET:https://example.com",
+            "trace_has_find=True",
+            "logger_has_exec=True",
+            "logger_has_exit=True",
+            "find_result=./seed.txt",
+            "defense_blocked=True",
+        ),
+        required_patterns=(r"coverage_hits=\d+", r"violations_recorded=\d+"),
     ),
     ExampleCase(
         script=Path("examples/parser_and_command_registry.py"),
@@ -142,7 +176,7 @@ def run_example(case: ExampleCase) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case.script.stem for case in CASES])
-def test_non_network_examples_run_from_repo_root(case: ExampleCase) -> None:
+def test_examples_run_from_repo_root(case: ExampleCase) -> None:
     completed = run_example(case)
 
     assert completed.returncode == 0, (
@@ -158,9 +192,9 @@ def test_non_network_examples_run_from_repo_root(case: ExampleCase) -> None:
         assert re.search(pattern, completed.stdout, re.MULTILINE) is not None
 
 
-def test_network_example_is_documented_as_optional_only() -> None:
+def test_network_example_is_documented_as_smoke_tested() -> None:
     readme = (ROOT / "examples" / "README.md").read_text(encoding="utf-8")
 
-    assert "Optional example:" in readme
     assert "network_access.py" in readme
-    assert "outbound internet" in readme
+    assert "All listed examples are smoke-tested" in readme
+    assert "local HTTP fixture" in readme

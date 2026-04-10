@@ -1,26 +1,19 @@
 from __future__ import annotations
 
-from just_bash import Bash, ExecutionLimits
+from just_bash import Bash
 
 
 def main() -> None:
-    with Bash(
-        cwd="/workspace",
-        files={"/workspace/hello.txt": "hello from just-py-bash\n"},
-        execution_limits=ExecutionLimits(max_command_count=500),
-    ) as bash:
-        result = bash.exec("cat hello.txt")
-        print("cat hello.txt")
+    with Bash(cwd="/workspace") as bash:
+        bash.exec("export NAME=alice; echo 'hello from the shared filesystem' > greeting.txt; cd /tmp")
+
+        print("shell state resets, filesystem persists")
+        result = bash.exec('printf "name=%s cwd=%s file=%s\n" "${NAME:-missing}" "$PWD" "$(cat greeting.txt)"')
         print(result.stdout, end="")
 
-        bash.write_text("note.txt", "written from Python\n")
-        listing = bash.exec("ls -1")
-        print("\nls -1")
-        print(listing.stdout, end="")
-
-        note = bash.read_text("note.txt")
+        bash.fs.write_text("note.txt", "written via bash.fs\n")
         print("\nread_text('note.txt')")
-        print(note, end="")
+        print(bash.read_text("note.txt"), end="")
 
 
 if __name__ == "__main__":

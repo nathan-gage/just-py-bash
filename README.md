@@ -37,17 +37,17 @@ That extra installs the first-party `just-bash-bundled-runtime` companion packag
 ### Synchronous API
 
 ```python
-from just_bash import Bash, ExecutionLimits
+from just_bash import Bash
 
-with Bash(
-    cwd="/workspace",
-    files={"/workspace/hello.txt": "hello\n"},
-    execution_limits=ExecutionLimits(max_command_count=500),
-) as bash:
-    result = bash.exec("cat hello.txt")
+with Bash(cwd="/workspace") as bash:
+    bash.exec("export NAME=alice; echo 'hello from the shared filesystem' > greeting.txt; cd /tmp")
+
+    result = bash.exec(
+        'printf "name=%s cwd=%s file=%s\n" "${NAME:-missing}" "$PWD" "$(cat greeting.txt)"',
+    )
     print(result.stdout, end="")
 
-    bash.write_text("note.txt", "from python\n")
+    bash.fs.write_text("note.txt", "written via bash.fs\n")
     print(bash.read_text("note.txt"), end="")
 ```
 
@@ -63,13 +63,15 @@ from just_bash import AsyncBash
 
 async def main() -> None:
     async with AsyncBash(cwd="/workspace") as bash:
-        await bash.write_text("note.txt", "hello from async\n")
+        await bash.exec("export NAME=alice; echo 'hello from async shared filesystem' > greeting.txt; cd /tmp")
 
-        result = await bash.exec("cat note.txt")
+        result = await bash.exec(
+            'printf "name=%s cwd=%s file=%s\n" "${NAME:-missing}" "$PWD" "$(cat greeting.txt)"',
+        )
         print(result.stdout, end="")
 
-        pwd = await bash.get_cwd()
-        print(f"cwd={pwd}")
+        await bash.fs.write_text("note.txt", "written via async bash.fs\n")
+        print(await bash.read_text("note.txt"), end="")
 
 
 asyncio.run(main())
@@ -129,6 +131,63 @@ Custom commands can:
 - override built-in command names if desired
 - return non-zero exit codes
 - raise exceptions, which become shell failures
+
+## Supported Commands
+
+The wrapper delegates command execution to upstream `just-bash`, so the Python API gets the same command families. For programmatic introspection, use:
+
+```python
+from just_bash import (
+    get_command_names,
+    get_javascript_command_names,
+    get_network_command_names,
+    get_python_command_names,
+)
+
+print(len(get_command_names()))
+print(sorted(get_network_command_names()))
+print(sorted(get_python_command_names()))
+print(sorted(get_javascript_command_names()))
+```
+
+<details>
+<summary><strong>Current upstream command categories</strong></summary>
+
+### File Operations
+
+`cat`, `cp`, `file`, `ln`, `ls`, `mkdir`, `mv`, `readlink`, `rm`, `rmdir`, `split`, `stat`, `touch`, `tree`
+
+### Text Processing
+
+`awk`, `base64`, `column`, `comm`, `cut`, `diff`, `expand`, `fold`, `grep` (+ `egrep`, `fgrep`), `head`, `join`, `md5sum`, `nl`, `od`, `paste`, `printf`, `rev`, `rg`, `sed`, `sha1sum`, `sha256sum`, `sort`, `strings`, `tac`, `tail`, `tr`, `unexpand`, `uniq`, `wc`, `xargs`
+
+### Data Processing
+
+`jq` (JSON), `sqlite3` (SQLite), `xan` (CSV), `yq` (YAML/XML/TOML/CSV)
+
+### Optional Runtimes
+
+`js-exec` (requires `javascript=True` / `JavaScriptConfig(...)`), `python3` / `python` (requires `python=True`)
+
+### Compression & Archives
+
+`gzip` (+ `gunzip`, `zcat`), `tar`
+
+### Navigation & Environment
+
+`basename`, `cd`, `dirname`, `du`, `echo`, `env`, `export`, `find`, `hostname`, `printenv`, `pwd`, `tee`
+
+### Shell Utilities
+
+`alias`, `bash`, `chmod`, `clear`, `date`, `expr`, `false`, `help`, `history`, `seq`, `sh`, `sleep`, `time`, `timeout`, `true`, `unalias`, `which`, `whoami`
+
+### Network
+
+`curl`, `html-to-markdown` (require `network=...`)
+
+All commands support `--help` for usage information.
+
+</details>
 
 ## Configuration
 
@@ -282,6 +341,67 @@ with Bash(
 
 `AsyncBash.exec(...)` accepts the same options; you just `await` the call.
 
+## Option Hooks and Callback Surfaces
+
+The wrapper exposes upstream construction-time hooks as Python callables and protocol-style objects.
+
+- `fetch`: intercept or implement HTTP requests for `curl` and other network consumers
+- `logger`: receive upstream `info(...)` / `debug(...)` events
+- `trace`: receive structured `TraceEvent` timing callbacks
+- `coverage`: receive feature-hit notifications
+- `defense_in_depth`: configure the upstream defense layer and optionally receive `SecurityViolation` objects
+
+```python
+from collections.abc import Mapping
+
+from just_bash import Bash, DefenseInDepthConfig, FetchRequest, FetchResult
+
+
+class Logger:
+    def info(self, message: str, data: Mapping[str, object] | None = None) -> None:
+        print("INFO", message, data)
+
+    def debug(self, message: str, data: Mapping[str, object] | None = None) -> None:
+        print("DEBUG", message, data)
+
+
+class Coverage:
+    def __init__(self) -> None:
+        self.hits: list[str] = []
+
+    def hit(self, feature: str) -> None:
+        self.hits.append(feature)
+
+
+coverage = Coverage()
+trace_events = []
+violations = []
+
+
+def fetch(request: FetchRequest) -> FetchResult:
+    return FetchResult(
+        status=200,
+        status_text="OK",
+        headers={"content-type": "text/plain"},
+        body="hello from fetch\n",
+        url=request.url,
+    )
+
+
+with Bash(
+    logger=Logger(),
+    trace=trace_events.append,
+    coverage=coverage,
+    fetch=fetch,
+    javascript=True,
+    defense_in_depth=DefenseInDepthConfig(enabled=True, audit_mode=True, on_violation=violations.append),
+) as bash:
+    print(bash.exec("curl -s https://example.com").stdout, end="")
+    bash.exec("find . -maxdepth 1 -type f")
+```
+
+See `examples/option_hooks.py` for a runnable end-to-end example.
+
 ## Optional Capabilities
 
 ### Network Access
@@ -303,7 +423,7 @@ with Bash(
     print(result.stdout, end="")
 ```
 
-Like upstream `just-bash`, `curl` only exists when network access is configured.
+Like upstream `just-bash`, `curl` only exists when network access is configured. The repository example `examples/network_access.py` demonstrates allow-listed methods and header transforms using a local HTTP fixture, so it stays smoke-testable without depending on the public internet.
 
 ### Python Support
 
@@ -403,20 +523,22 @@ print(logger.get_summary())
 
 ## Examples
 
-The repo includes a Python `examples/` directory that mirrors the spirit of the vendored upstream examples and README:
+The repo includes a Python `examples/` directory that mirrors the spirit of the vendored upstream examples and README. These examples are smoke-tested from the repo root so they stay aligned with the shipped public API:
 
 | File | What it shows |
 |---|---|
-| `examples/quickstart_sync.py` | Basic synchronous usage |
-| `examples/quickstart_async.py` | Native-async usage with `AsyncBash` |
+| `examples/quickstart_sync.py` | Basic synchronous usage, shell-state reset semantics, shared filesystem state, and `bash.fs` helpers |
+| `examples/quickstart_async.py` | Native-async usage with `AsyncBash` and async filesystem helpers |
 | `examples/custom_commands_sync.py` | A Python port of the upstream custom-command showcase |
 | `examples/custom_commands_async.py` | Async custom commands with nested async exec |
-| `examples/configuration_and_runtimes.py` | Session config, per-exec overrides, Python, and JavaScript runtimes |
+| `examples/configuration_and_runtimes.py` | Session config, per-exec overrides, `replace_env`, Python, and JavaScript runtimes |
+| `examples/filesystem_surfaces.py` | `FileInit`, `LazyFile`, `FsStat`, and the session-bound filesystem API |
+| `examples/network_access.py` | Allow-listed network access, method policy, and header transforms via a local HTTP fixture |
+| `examples/option_hooks.py` | Python callback surfaces for `fetch`, `logger`, `trace`, `coverage`, and `defense_in_depth` |
 | `examples/parser_and_command_registry.py` | Command-name helpers plus standalone `parse(...)` / `serialize(...)` |
 | `examples/transforms.py` | Standalone transform pipelines and session-integrated transform registration |
 | `examples/sandbox.py` | Upstream-style sandbox helpers, detached commands, and file IO |
 | `examples/security_helpers.py` | Security violation logging helpers |
-| `examples/network_access.py` | Allow-listed network access with `curl` |
 
 See [`examples/README.md`](examples/README.md) for run instructions.
 
