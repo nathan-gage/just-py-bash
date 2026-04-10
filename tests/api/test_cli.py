@@ -186,6 +186,23 @@ def test_cli_delegates_json_output_to_upstream() -> None:
     assert_completed_matches_upstream(python_completed, upstream_completed)
 
 
+def test_cli_delegates_allow_write_flag_to_upstream(tmp_path: Path) -> None:
+    args = ("-c", "echo write-ok > out.txt && cat out.txt", "--allow-write")
+    python_completed = run_source_cli(*args, cwd=tmp_path, env_overrides=packaged_backend_env())
+    upstream_completed = run_upstream_cli(*args, cwd=tmp_path)
+
+    assert_completed_matches_upstream(python_completed, upstream_completed)
+
+
+def test_cli_delegates_errexit_flag_to_upstream() -> None:
+    args = ("-e", "-c", "false; echo nope")
+    python_completed = run_source_cli(*args, env_overrides=packaged_backend_env())
+    upstream_completed = run_upstream_cli(*args)
+
+    assert_completed_matches_upstream(python_completed, upstream_completed)
+    assert python_completed.returncode == 1
+
+
 def test_cli_delegates_script_file_execution_to_upstream(tmp_path: Path) -> None:
     script_path = tmp_path / "script.sh"
     script_path.write_text("printf file-script", encoding="utf-8")
