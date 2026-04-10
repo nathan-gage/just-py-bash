@@ -23,13 +23,13 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `186 passed`
+- The current local test count is `187 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 - The session-bound filesystem API is now implemented for the core upstream filesystem operations
 - Richer initial file parity is now implemented via `FileInit(...)` and `LazyFile(...)`, including differential coverage for callable lazy providers
 - Upstream option parity is now implemented for `fetch`, `logger`, `trace`, `defenseInDepth`, and `coverage`, with API, packaging, and differential coverage
-- Defense-in-depth confidence now includes differential probes against the shipped upstream defense implementations so wrapper behavior stays locked to what upstream actually emits today
+- Defense-in-depth confidence now includes differential probes against the shipped upstream defense implementations where the relevant defense surface is importable from the shipped backend artifact, and contract coverage for worker-side violation transport everywhere else
 
 ## Capability matrix
 
@@ -227,7 +227,7 @@ That includes Python-facing support plus API, packaging, and wrapper-vs-upstream
 - [x] upstream `coverage`
 - [x] parity or contract coverage for each added option
 
-The defense-in-depth portion is intentionally documented against **shipped upstream behavior**, not an idealized future model. The current shipped upstream surface emits positive audit-mode `onViolation` callbacks in the worker-defense probe path, while the main-thread defense probe used here does not currently surface positive callbacks in the same way. The wrapper now differentially locks to that shipped behavior so future upstream changes will be visible immediately.
+The defense-in-depth portion is intentionally documented against **shipped upstream behavior**, not an idealized future model. The current shipped upstream surface does not expose the same importable defense internals in every shipped artifact shape, so the wrapper uses differential probes where those surfaces are available and falls back to contract coverage for worker-side violation transport where they are not. The current shipped main-thread defense probe used here still does not surface positive callbacks in the same way as the worker-defense path.
 
 ### Broader export parity
 
