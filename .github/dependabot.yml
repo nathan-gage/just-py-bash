@@ -1,0 +1,49 @@
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directories:
+      - "/"
+      - "/just_py_bash"
+      - "/just_bash_bundled_runtime"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    assignees:
+      - "nathan-gage"
+    labels:
+      - "dependencies"
+      - "enhancement"
+    versioning-strategy: "increase-if-necessary"
+    groups:
+      python-non-major:
+        group-by: "dependency-name"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    assignees:
+      - "nathan-gage"
+    labels:
+      - "dependencies"
+      - "enhancement"
+    groups:
+      github-actions-non-major:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
