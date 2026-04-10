@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pytest import MonkeyPatch
@@ -105,3 +106,84 @@ def test_javascript_runtime_executes_when_enabled(
     assert result.exit_code == 0
     assert result.stdout == "bootstrapped:5\n"
     assert result.stderr == ""
+
+
+def test_packaged_runtime_option_hooks_work_with_coverage_enabled(
+    monkeypatch: MonkeyPatch,
+    packaged_runtime_artifacts: tuple[str, str],
+) -> None:
+    use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
+    api = public_api()
+    Bash = api.Bash
+    DefenseInDepthConfig = api.DefenseInDepthConfig
+    FetchResult = api.FetchResult
+
+    class Logger:
+        def __init__(self) -> None:
+            self.events: list[tuple[str, str]] = []
+
+        def info(self, message: str, data: object | None = None) -> None:
+            del data
+            self.events.append(("info", message))
+
+        def debug(self, message: str, data: object | None = None) -> None:
+            del data
+            self.events.append(("debug", message))
+
+    class Coverage:
+        def __init__(self) -> None:
+            self.hits: list[str] = []
+
+        def hit(self, feature: str) -> None:
+            self.hits.append(feature)
+
+    logger = Logger()
+    coverage = Coverage()
+    trace_events: list[Any] = []
+    fetch_requests: list[tuple[str, str]] = []
+    violations: list[Any] = []
+
+    def fetch(request: Any) -> object:
+        fetch_requests.append((request.method, request.url))
+        return FetchResult(
+            status=200,
+            status_text="OK",
+            headers={"content-type": "text/plain"},
+            body="hello from fetch\n",
+            url=request.url,
+        )
+
+    with Bash(
+        files={"/workspace/seed.txt": "seed\n"},
+        cwd="/workspace",
+        logger=logger,
+        trace=trace_events.append,
+        coverage=coverage,
+        fetch=fetch,
+        javascript=True,
+        defense_in_depth=DefenseInDepthConfig(enabled=True, audit_mode=True, on_violation=violations.append),
+    ) as bash:
+        fetch_result = bash.exec("curl -s https://example.com")
+        find_result = bash.exec("find . -maxdepth 1 -type f | sort")
+        js_result = bash.exec(
+            "js-exec -c \"try { new Function('return 1')(); } catch (e) { console.log(e.message); }\"",
+        )
+
+    assert fetch_result.exit_code == 0
+    assert fetch_result.stdout == "hello from fetch\n"
+    assert fetch_result.stderr == ""
+    assert fetch_requests == [("GET", "https://example.com")]
+
+    assert find_result.exit_code == 0
+    assert find_result.stdout == "./seed.txt\n"
+    assert find_result.stderr == ""
+    assert any(getattr(event, "category", None) == "find" for event in trace_events)
+
+    assert js_result.exit_code == 0
+    assert "Function constructor is not allowed" in js_result.stdout
+    assert js_result.stderr == ""
+
+    assert ("info", "exec") in logger.events
+    assert ("info", "exit") in logger.events
+    assert coverage.hits
+    assert any(hit.startswith("bash:") or hit.startswith("cmd:") for hit in coverage.hits)
