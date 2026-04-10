@@ -538,6 +538,9 @@ def test_defense_violation_probe_matches_upstream(
     runner: ScenarioRunner,
     kind: str,
 ) -> None:
+    if kind == "worker" and not (backend_artifacts.package_json.parent / "dist" / "security" / "index.js").exists():
+        pytest.skip("WorkerDefenseInDepth is not shipped as an importable module in this backend artifact")
+
     api = public_api()
     python_violations: list[dict[str, object]] = []
     reference_violations: list[dict[str, object]] = []

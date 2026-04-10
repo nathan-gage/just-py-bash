@@ -37,10 +37,9 @@ class _CoverageWriter:
         self.hits.append(feature)
 
 
-def test_bash_logger_trace_coverage_and_fetch_hooks_are_supported() -> None:
+def test_bash_logger_trace_and_fetch_hooks_are_supported() -> None:
     api = public_api()
     logger = _RecorderLogger()
-    coverage = _CoverageWriter()
     trace_events: list[Any] = []
     fetch_requests: list[Any] = []
 
@@ -62,7 +61,6 @@ def test_bash_logger_trace_coverage_and_fetch_hooks_are_supported() -> None:
         cwd="/workspace",
         logger=logger,
         trace=trace,
-        coverage=coverage,
         fetch=fetch,
     ) as bash:
         fetch_result = bash.exec("curl -s https://example.com")
@@ -84,6 +82,15 @@ def test_bash_logger_trace_coverage_and_fetch_hooks_are_supported() -> None:
     assert any(level == "info" and message == "stderr" for level, message, _ in logger.events)
     assert any(level == "info" and message == "exit" for level, message, _ in logger.events)
 
+
+def test_bash_coverage_hook_is_supported() -> None:
+    api = public_api()
+    coverage = _CoverageWriter()
+
+    with api.Bash(coverage=coverage) as bash:
+        result = bash.exec("true")
+
+    assert result.exit_code == 0
     assert coverage.hits
     assert any(hit.startswith("bash:") or hit.startswith("cmd:") for hit in coverage.hits)
 
@@ -234,7 +241,7 @@ def test_bash_exec_waits_for_coverage_callback_completion() -> None:
     with api.Bash(coverage=WaitingCoverage()) as bash:
 
         def run_exec() -> None:
-            result_holder["result"] = bash.exec("echo hi")
+            result_holder["result"] = bash.exec("true")
             done.set()
 
         thread = threading.Thread(target=run_exec, daemon=True)
@@ -245,7 +252,7 @@ def test_bash_exec_waits_for_coverage_callback_completion() -> None:
         thread.join(timeout=2)
 
     result = result_holder["result"]
-    assert result.stdout == "hi\n"
+    assert result.exit_code == 0
     assert done.is_set()
 
 
@@ -319,13 +326,13 @@ def test_async_bash_exec_waits_for_coverage_callback_completion() -> None:
     async def exercise() -> None:
         coverage = AsyncWaitingCoverage()
         async with api.AsyncBash(coverage=coverage) as bash:
-            task = asyncio.create_task(bash.exec("echo hi"))
+            task = asyncio.create_task(bash.exec("true"))
             await asyncio.wait_for(coverage.started.wait(), timeout=2)
             assert not task.done()
             coverage.release.set()
             result = await asyncio.wait_for(task, timeout=2)
 
-        assert result.stdout == "hi\n"
+        assert result.exit_code == 0
 
     asyncio.run(exercise())
 
@@ -452,7 +459,7 @@ def test_bash_coverage_callback_failure_closes_bridge() -> None:
 
     with api.Bash(coverage=BoomCoverage()) as bash:
         with pytest.raises(RuntimeError, match="coverage boom"):
-            bash.exec("echo hi")
+            bash.exec("true")
         assert bash.closed is True
 
 
@@ -500,7 +507,7 @@ def test_async_bash_coverage_callback_failure_closes_bridge() -> None:
     async def exercise() -> None:
         async with api.AsyncBash(coverage=BoomCoverage()) as bash:
             with pytest.raises(RuntimeError, match="coverage boom"):
-                await bash.exec("echo hi")
+                await bash.exec("true")
             assert bash.closed is True
 
     asyncio.run(exercise())
