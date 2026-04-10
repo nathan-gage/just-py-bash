@@ -113,6 +113,7 @@ markers = [
   "generated: property-based generated scenarios",
   "contract: future-facing capability contracts",
   "packaging: distribution and installation contracts",
+  "bundled_runtime_packaging: just_bash_bundled_runtime wheel packaging contract coverage",
 ]
 
 [tool.coverage.run]

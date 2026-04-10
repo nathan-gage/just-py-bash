@@ -159,12 +159,6 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
-        with:
-          python-version: "3.11"
-          enable-cache: false
-
       - name: Set up pnpm
         uses: pnpm/action-setup@v5.0.0
         with:
@@ -178,7 +172,16 @@ jobs:
           cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
 
       - name: Build vendored backend and packaged runtime
-        run: make prepare-test-backend
+        shell: bash
+        env:
+          npm_config_script_shell: bash
+        run: |
+          cd vendor/just-bash
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+          pnpm build
+          cd ../..
+          bash just_py_bash/tools/build_packaged_runtime.sh
 
       - name: Record backend artifact metadata
         shell: bash
@@ -190,14 +193,15 @@ jobs:
         uses: actions/upload-artifact@v6.0.0
         with:
           name: backend-assets
+          compression-level: 0
           path: |
             .ci/backend-artifact/github_sha.txt
             just_py_bash/src/just_bash/_vendor/just-bash/package.json
             just_py_bash/src/just_bash/_vendor/just-bash/dist/**
             just_py_bash/src/just_bash/_vendor/just-bash/vendor/**
 
-  full:
-    name: full / ubuntu / py3.11 / node22
+  prepare-runtime:
+    name: prepare-runtime / ubuntu
     needs: detect
     if: needs.detect.outputs.run_full == 'true'
     runs-on: ubuntu-latest
@@ -206,45 +210,33 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6.0.2
         with:
-          fetch-depth: 0
-          submodules: recursive
           persist-credentials: false
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v8.0.0
+      - name: Restore cached bundled runtime payload
+        id: runtime-cache
+        uses: actions/cache@v5.0.4
         with:
-          python-version: "3.11"
-          enable-cache: true
-          cache-python: true
-          cache-suffix: full
-          cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5.0.0
-        with:
-          version: 8.15.9
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.3.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
-
-      - name: Install dependencies and build vendored just-bash backend
-        run: make install
+          path: |
+            just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime
+            just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime-metadata.json
+          key: bundled-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('just_bash_bundled_runtime/pyproject.toml',
+            'just_bash_bundled_runtime/tools/vendor_runtime.py') }}
 
       - name: Vendor bundled runtime payload
-        run: make vendor-bundled-runtime
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        run: python just_bash_bundled_runtime/tools/vendor_runtime.py
 
-      - name: Run full CI check suite
-        run: make all-ci
+      - name: Upload bundled runtime assets
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: bundled-runtime-assets-ubuntu
+          compression-level: 0
+          path: |
+            just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/**
+            just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime-metadata.json
 
-      - name: Build main package distributions
-        run: uv build just_py_bash --out-dir dist
-
-  bundled-node:
-    name: bundled-node / ubuntu / py3.11
+  full:
+    name: full / ubuntu / py3.11 / node22
     needs:
       - detect
       - prepare-backend
@@ -255,6 +247,79 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6.0.2
         with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.0.0
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-python: false
+          cache-suffix: full
+          cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.3.0
+        with:
+          node-version: "22"
+
+      - name: Install Python test dependencies
+        run: uv sync --frozen --only-group dev
+
+      - name: Download backend assets
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: backend-assets
+          path: .
+
+      - name: Verify backend assets and configure packaged runtime env
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          sha_path = Path('.ci/backend-artifact/github_sha.txt')
+          actual_sha = sha_path.read_text(encoding='utf-8').strip()
+          expected_sha = os.environ['GITHUB_SHA']
+          if actual_sha != expected_sha:
+              raise SystemExit(f'Backend artifact SHA mismatch: {actual_sha} != {expected_sha}')
+
+          runtime_root = Path('just_py_bash/src/just_bash/_vendor/just-bash').resolve()
+          package_json = runtime_root / 'package.json'
+          if not package_json.is_file():
+              raise SystemExit(f'Missing packaged runtime metadata at {package_json}')
+
+          candidates = [runtime_root / 'dist/index.js', runtime_root / 'dist/bundle/index.js']
+          runtime_entry = next((path for path in candidates if path.is_file()), None)
+          if runtime_entry is None:
+              raise SystemExit(f'Missing packaged runtime entrypoint under {runtime_root}')
+
+          github_env = Path(os.environ['GITHUB_ENV'])
+          with github_env.open('a', encoding='utf-8') as handle:
+              handle.write(f'JUST_BASH_JS_ENTRY={runtime_entry}\n')
+              handle.write(f'JUST_BASH_PACKAGE_JSON={package_json}\n')
+              handle.write(f'JUST_BASH_TEST_PACKAGED_JS_ENTRY={runtime_entry}\n')
+              handle.write(f'JUST_BASH_TEST_PACKAGED_PACKAGE_JSON={package_json}\n')
+
+      - name: Run packaging-focused contract suite
+        run: uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "packaging and not bundled_runtime_packaging"
+
+      - name: Build main package distributions
+        run: uv build just_py_bash --out-dir dist
+
+  bundled-node:
+    name: bundled-node / ubuntu / py3.11
+    needs:
+      - detect
+      - prepare-backend
+      - prepare-runtime
+    if: needs.detect.outputs.run_full == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+        with:
           fetch-depth: 0
           persist-credentials: false
 
@@ -263,15 +328,22 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: bundled-node
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
       - name: Install Python test dependencies
         run: make install-python-tests
 
-      - name: Vendor bundled runtime payload
-        run: make vendor-bundled-runtime
+      - name: Download bundled runtime assets
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: bundled-runtime-assets-ubuntu
+          path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
+
+      - name: Restore bundled runtime executable permissions
+        shell: bash
+        run: chmod +x just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/bin/node
 
       - name: Download backend assets
         uses: actions/download-artifact@v8.0.1
@@ -311,7 +383,7 @@ jobs:
       - name: Verify bundled Node works without a system node on PATH
         shell: bash
         run: |
-          PYTHONPATH=just_py_bash/src uv run --with ./just_bash_bundled_runtime python - <<'PY'
+          PYTHONPATH=just_py_bash/src uv run --no-sync --with ./just_bash_bundled_runtime python - <<'PY'
           import os
           import sys
 
@@ -365,7 +437,12 @@ jobs:
         env:
           npm_config_script_shell: bash
         run: |
-          pnpm install --frozen-lockfile
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            pnpm install --frozen-lockfile --ignore-scripts
+            pnpm rebuild esbuild
+          else
+            pnpm install --frozen-lockfile
+          fi
           pnpm build
 
   runtime-compat:
@@ -410,7 +487,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: compat-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.node-version }}
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
@@ -458,11 +535,22 @@ jobs:
               handle.write(f'JUST_BASH_TEST_PACKAGED_PACKAGE_JSON={package_json}\n')
 
       - name: Run non-packaging test suite
-        run: uv run pytest -q -m "not packaging"
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: COLUMNS=150 uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
+
+      - name: Run non-packaging test suite (Windows, 5 workers)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          PYTEST_XDIST_AUTO_NUM_WORKERS: "5"
+        run: COLUMNS=150 uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
 
   bundled-runtime-packaging:
     name: bundled-runtime wheel / ${{ matrix.os }}
-    needs: detect
+    needs:
+      - detect
+      - prepare-runtime
     if: needs.detect.outputs.run_full == 'true'
     runs-on: ${{ matrix.os }}
 
@@ -486,18 +574,44 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: bundled-runtime-packaging
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
+      - name: Download prepared bundled runtime assets
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: bundled-runtime-assets-ubuntu
+          path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
+
+      - name: Restore bundled runtime executable permissions
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: chmod +x just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/bin/node
+
+      - name: Restore cached bundled runtime payload
+        if: matrix.os != 'ubuntu-latest'
+        id: runtime-cache
+        uses: actions/cache@v5.0.4
+        with:
+          path: |
+            just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime
+            just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime-metadata.json
+          key: bundled-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('just_bash_bundled_runtime/pyproject.toml',
+            'just_bash_bundled_runtime/tools/vendor_runtime.py') }}
+
       - name: Vendor bundled runtime payload
-        run: uv run --no-project python just_bash_bundled_runtime/tools/vendor_runtime.py
+        if: matrix.os != 'ubuntu-latest' && steps.runtime-cache.outputs.cache-hit != 'true'
+        run: python just_bash_bundled_runtime/tools/vendor_runtime.py
 
       - name: Build bundled runtime wheel
         run: uv build just_bash_bundled_runtime --wheel --out-dir dist-node
 
       - name: Smoke test bundled runtime wheel
         shell: bash
+        env:
+          UV_FROZEN: "0"
         run: |-
           wheel=$(echo dist-node/*.whl)
           uv run --no-project --with "$wheel" python - <<'PY'
@@ -520,6 +634,7 @@ jobs:
     needs:
       - detect
       - prepare-backend
+      - prepare-runtime
       - full
       - bundled-node
       - native-build-smoke
@@ -535,6 +650,7 @@ jobs:
           RUN_FULL: ${{ needs.detect.outputs.run_full }}
           DETECT_RESULT: ${{ needs.detect.result }}
           PREPARE_BACKEND_RESULT: ${{ needs['prepare-backend'].result }}
+          PREPARE_RUNTIME_RESULT: ${{ needs['prepare-runtime'].result }}
           FULL_RESULT: ${{ needs.full.result }}
           BUNDLED_NODE_RESULT: ${{ needs['bundled-node'].result }}
           NATIVE_BUILD_SMOKE_RESULT: ${{ needs['native-build-smoke'].result }}
@@ -544,6 +660,7 @@ jobs:
           echo "run_full=$RUN_FULL"
           echo "detect=$DETECT_RESULT"
           echo "prepare-backend=$PREPARE_BACKEND_RESULT"
+          echo "prepare-runtime=$PREPARE_RUNTIME_RESULT"
           echo "full=$FULL_RESULT"
           echo "bundled-node=$BUNDLED_NODE_RESULT"
           echo "native-build-smoke=$NATIVE_BUILD_SMOKE_RESULT"
@@ -558,6 +675,7 @@ jobs:
           fi
 
           [[ "$PREPARE_BACKEND_RESULT" == "success" ]]
+          [[ "$PREPARE_RUNTIME_RESULT" == "success" ]]
           [[ "$FULL_RESULT" == "success" ]]
           [[ "$BUNDLED_NODE_RESULT" == "success" ]]
           [[ "$NATIVE_BUILD_SMOKE_RESULT" == "success" ]]

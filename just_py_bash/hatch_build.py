@@ -21,7 +21,7 @@ class JustBashBuildHook(BuildHookInterface):
 
         project_root = Path(self.root)
         runtime_root = project_root / _RUNTIME_ROOT
-        if source_vendor_checkout_ready(project_root):
+        if source_vendor_checkout_build_ready(project_root):
             build_script = project_root / _BUILD_SCRIPT
             if not build_script.exists():
                 raise RuntimeError(f"Missing packaged runtime build script: {build_script}")
@@ -51,9 +51,19 @@ class JustBashBuildHook(BuildHookInterface):
         raise RuntimeError(_MISSING_RUNTIME_MESSAGE)
 
 
-def source_vendor_checkout_ready(project_root: Path) -> bool:
+def source_vendor_checkout_build_ready(project_root: Path) -> bool:
     vendor_root = project_root.parent / "vendor" / "just-bash"
-    return vendor_root.joinpath("package.json").is_file()
+    required_files = (
+        "package.json",
+        "dist/index.js",
+        "dist/bin/just-bash.js",
+        "dist/bin/shell/shell.js",
+        "src/commands/python3/worker.js",
+    )
+    return (
+        all(vendor_root.joinpath(relative_path).is_file() for relative_path in required_files)
+        and vendor_root.joinpath("node_modules").is_dir()
+    )
 
 
 def packaged_runtime_ready(runtime_root: Path) -> bool:

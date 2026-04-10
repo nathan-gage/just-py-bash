@@ -734,6 +734,7 @@ def test_sdist_contains_packaged_just_bash_runtime(tmp_path: Path) -> None:
     assert any(name.endswith("/src/just_bash/_vendor/just-bash/dist/bin/shell/shell.js") for name in names)
 
 
+@pytest.mark.bundled_runtime_packaging
 def test_bundled_runtime_wheel_is_platform_specific_and_installs(tmp_path: Path) -> None:
     wheel = build_distribution("wheel", tmp_path / "runtime-dist", package_root=RUNTIME_PACKAGE_ROOT)
 
