@@ -9,6 +9,7 @@ import pytest
 from tests.support.harness import (
     BackendArtifacts,
     op_exec,
+    op_probe_defense_violation,
     public_api,
     run_async_differential_scenario,
     run_differential_scenario,
@@ -32,6 +33,13 @@ class _TraceEventLike(Protocol):
     category: str
     name: str
     details: Mapping[str, object] | None
+
+
+class _SecurityViolationLike(Protocol):
+    type: str
+    message: str
+    path: str
+    execution_id: str | None
 
 
 class _RecorderLogger:
@@ -92,6 +100,20 @@ def _normalize_trace_event(event: object) -> dict[str, object]:
 
 def _without_timeout_ms(requests: list[dict[str, object]]) -> list[dict[str, object]]:
     return [{key: value for key, value in request.items() if key != "timeout_ms"} for request in requests]
+
+
+def _normalize_security_violation(violation: object) -> dict[str, object]:
+    typed_violation = cast(_SecurityViolationLike, violation)
+    return {
+        "type": typed_violation.type,
+        "message": typed_violation.message,
+        "path": typed_violation.path,
+        "execution_id": typed_violation.execution_id,
+    }
+
+
+def _without_execution_id(violations: list[dict[str, object]]) -> list[dict[str, object]]:
+    return [{key: value for key, value in violation.items() if key != "execution_id"} for violation in violations]
 
 
 @pytest.mark.parametrize(
@@ -499,3 +521,70 @@ def test_defense_in_depth_option_matches_upstream(
 
     assert python_result == reference_result
     assert python_result["results"][0]["value"]["stdout"] == "defense\n/home/user"
+
+
+@pytest.mark.parametrize(
+    ("runner", "kind"),
+    [
+        (run_differential_scenario, "main"),
+        (run_async_differential_scenario, "main"),
+        (run_differential_scenario, "worker"),
+        (run_async_differential_scenario, "worker"),
+    ],
+    ids=["sync-main", "async-main", "sync-worker", "async-worker"],
+)
+def test_defense_violation_probe_matches_upstream(
+    backend_artifacts: BackendArtifacts,
+    runner: ScenarioRunner,
+    kind: str,
+) -> None:
+    api = public_api()
+    python_violations: list[dict[str, object]] = []
+    reference_violations: list[dict[str, object]] = []
+
+    def python_on_violation(violation: Any) -> None:
+        python_violations.append(_normalize_security_violation(violation))
+
+    def reference_on_violation(violation: Any) -> None:
+        reference_violations.append(_normalize_security_violation(violation))
+
+    python_result, reference_result = runner(
+        init_kwargs={
+            "defense_in_depth": api.DefenseInDepthConfig(
+                enabled=True,
+                audit_mode=True,
+                on_violation=python_on_violation,
+            )
+        },
+        reference_init_kwargs={
+            "defense_in_depth": api.DefenseInDepthConfig(
+                enabled=True,
+                audit_mode=True,
+                on_violation=reference_on_violation,
+            )
+        },
+        operations=[op_probe_defense_violation(kind)],
+        backend_artifacts=backend_artifacts,
+    )
+
+    assert python_result == reference_result
+    expected_violation_count = 0 if kind == "main" else 1
+    assert python_result["results"][0]["value"] == {
+        "kind": kind,
+        "returnValue": 42,
+        "violationCount": expected_violation_count,
+    }
+    assert _without_execution_id(python_violations) == _without_execution_id(reference_violations)
+    assert len(python_violations) == expected_violation_count
+    if kind == "worker":
+        assert python_violations[0]["type"] == "function_constructor"
+        assert python_violations[0]["path"] == "globalThis.Function"
+        assert isinstance(python_violations[0]["message"], str)
+        assert python_violations[0]["execution_id"] is None or isinstance(
+            python_violations[0]["execution_id"],
+            str,
+        )
+        assert reference_violations[0]["execution_id"] is None or isinstance(
+            reference_violations[0]["execution_id"],
+            str,
+        )

@@ -23,11 +23,13 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `136 passed`
+- The current local test count is `186 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 - The session-bound filesystem API is now implemented for the core upstream filesystem operations
 - Richer initial file parity is now implemented via `FileInit(...)` and `LazyFile(...)`, including differential coverage for callable lazy providers
+- Upstream option parity is now implemented for `fetch`, `logger`, `trace`, `defenseInDepth`, and `coverage`, with API, packaging, and differential coverage
+- Defense-in-depth confidence now includes differential probes against the shipped upstream defense implementations so wrapper behavior stays locked to what upstream actually emits today
 
 ## Capability matrix
 
@@ -54,7 +56,7 @@ The direction for this project is now explicit:
 | Init-time fs config objects (`fs=`) | Implemented | Strong | `tests/api/test_fs_config_api.py`, `tests/parity/test_filesystem_configs.py` |
 | Session-bound low-level fs API (`exists`, `stat`, `mkdir`, `readdir`, `rm`, etc.) | Implemented | Strong | `tests/api/test_filesystem_session_api.py`, `tests/parity/test_session_fs_api.py`, `tests/contracts/test_distributions.py` |
 | Richer initial file parity (`FileInit`, `LazyFile`) | Implemented | Strong | `tests/api/test_filesystem_session_api.py`, `tests/parity/test_session_fs_api.py`, `tests/api/test_fs_config_api.py`, `tests/contracts/test_distributions.py` |
-| Upstream option parity (`fetch`, `logger`, `trace`, `defenseInDepth`, `coverage`) | Planned | N/A | Roadmap — Option parity |
+| Upstream option parity (`fetch`, `logger`, `trace`, `defenseInDepth`, `coverage`) | Implemented | Strong | `tests/api/test_option_parity_api.py`, `tests/parity/test_option_parity.py`, `tests/contracts/test_distributions.py` |
 | Broader upstream transform/plugin/parser/security/sandbox exports | Planned | N/A | Roadmap — Broader export parity |
 
 ## What gives confidence today
@@ -74,6 +76,7 @@ That suite currently covers:
 - filesystem-config parity for overlay, read-write, and mountable configurations
 - session-fs parity for core operations, symlinks, cross-mount copies, read-only overlays, host-persistent write roots, and path failures
 - richer initial file parity for metadata-aware files plus static and callable lazy files
+- option parity for `fetch`, `logger`, `trace`, `coverage`, and `defenseInDepth`, including sync/async callback semantics, installed-distribution smoke, and differential coverage for real shipped defense probes
 
 ### Public API and contract tests
 
@@ -103,6 +106,10 @@ These milestones are already in place:
 - [x] sync and async parity coverage for core session-fs operations
 - [x] differential parity coverage for callable lazy files
 - [x] repo-root smoke coverage for the shipped non-network examples
+- [x] Python-facing option support for upstream `fetch`, `logger`, `trace`, `defenseInDepth`, and `coverage`
+- [x] sync and async contract coverage for option-hook completion and failure semantics
+- [x] differential parity coverage for option hooks, including broader fetch scenarios and real defense probes
+- [x] wheel/sdist smoke coverage for shipped option-hook support
 
 ## Roadmap
 
@@ -209,14 +216,18 @@ That milestone is intentionally scoped to the session-facing API. It does **not*
 
 ### Option parity
 
-Expand the remaining upstream construction/configuration surfaces with Pythonic wrappers that serialize directly into upstream behavior.
+The option-parity milestone is now in place for the current upstream construction/configuration option surface.
 
-- [ ] add Python-facing support for upstream `fetch`
-- [ ] add Python-facing support for upstream `logger`
-- [ ] add Python-facing support for upstream `trace`
-- [ ] add Python-facing support for upstream `defenseInDepth`
-- [ ] add Python-facing support for upstream `coverage`
-- [ ] add parity or contract coverage for each added option
+That includes Python-facing support plus API, packaging, and wrapper-vs-upstream differential coverage for:
+
+- [x] upstream `fetch`
+- [x] upstream `logger`
+- [x] upstream `trace`
+- [x] upstream `defenseInDepth`
+- [x] upstream `coverage`
+- [x] parity or contract coverage for each added option
+
+The defense-in-depth portion is intentionally documented against **shipped upstream behavior**, not an idealized future model. The current shipped upstream surface emits positive audit-mode `onViolation` callbacks in the worker-defense probe path, while the main-thread defense probe used here does not currently surface positive callbacks in the same way. The wrapper now differentially locks to that shipped behavior so future upstream changes will be visible immediately.
 
 ### Broader export parity
 
@@ -233,8 +244,7 @@ After the session API, CLI, filesystem API, and construction options are in plac
 The current recommended order is:
 
 1. confidence and maintenance work
-2. option parity
-3. broader export parity
-4. CLI parity through thin delegation
+2. broader export parity
+3. CLI parity through thin delegation
 
 That ordering is only a sequencing guide. The roadmap itself is organized by parity area so the desired end state stays clear.

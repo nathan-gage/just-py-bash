@@ -1,5 +1,6 @@
 WORKER_SOURCE = """
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
@@ -9,6 +10,7 @@ let BashClass = null;
 let backendModule = null;
 let bash = null;
 let backendVersion = null;
+let packageJsonPath = null;
 let nextInvocationId = 1;
 const pendingCustomCommands = new Map();
 const pendingLazyFiles = new Map();
@@ -261,6 +263,62 @@ function decodeDefenseInDepth(spec) {
   return decoded;
 }
 
+async function runDefenseViolationProbe(kind) {
+  if (!backendModule) {
+    throw new Error('Backend module is not loaded');
+  }
+
+  if (kind === 'main') {
+    const violations = [];
+    const box = backendModule.DefenseInDepthBox.getInstance({
+      enabled: true,
+      auditMode: true,
+      onViolation: (violation) => {
+        violations.push(violation);
+        emitDefenseViolationEvent(normalizeSecurityViolation(violation));
+      },
+    });
+    const handle = box.activate();
+    try {
+      const returnValue = await handle.run(async () => {
+        const fn = new Function('return 42');
+        return fn();
+      });
+      return { kind, returnValue, violationCount: violations.length };
+    } finally {
+      handle.deactivate();
+      backendModule.DefenseInDepthBox.resetInstance();
+    }
+  }
+
+  if (kind === 'worker') {
+    if (!packageJsonPath) {
+      throw new Error('package.json path is not configured');
+    }
+    const securityModuleUrl = pathToFileURL(
+      join(dirname(packageJsonPath), 'dist', 'security', 'index.js'),
+    ).href;
+    const securityModule = await import(securityModuleUrl);
+    const violations = [];
+    const defense = new securityModule.WorkerDefenseInDepth({
+      auditMode: true,
+      excludeViolationTypes: ['process_stdout', 'process_stderr'],
+      onViolation: (violation) => {
+        violations.push(violation);
+        emitDefenseViolationEvent(normalizeSecurityViolation(violation));
+      },
+    });
+    try {
+      const fn = new Function('return 42');
+      return { kind, returnValue: fn(), violationCount: violations.length };
+    } finally {
+      defense.deactivate();
+    }
+  }
+
+  throw new Error(`Unknown defense probe kind: ${String(kind)}`);
+}
+
 function decodeFs(spec) {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
     throw new Error('Unsupported fs config payload');
@@ -511,6 +569,7 @@ async function handleMessage(message) {
       BashClass = mod.Bash;
       bash = new BashClass(decodeInitOptions(message.options ?? {}));
 
+      packageJsonPath = message.packageJson ?? null;
       if (message.packageJson) {
         const packageJson = JSON.parse(
           await readFile(message.packageJson, 'utf8'),
@@ -652,6 +711,11 @@ async function handleMessage(message) {
     case 'get_cwd': {
       ensureInitialized();
       return bash.getCwd();
+    }
+
+    case 'probe_defense_violation': {
+      ensureInitialized();
+      return await runDefenseViolationProbe(message.kind);
     }
 
     default:
