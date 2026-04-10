@@ -321,6 +321,13 @@ def test_session_fs_cross_mount_copy_matches_upstream(
     )
 
     assert python_result == reference_result
+    if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        assert python_result["results"][1]["kind"] == "error"
+        assert python_result["results"][3]["value"] is False
+        assert not (workspace_root / "copy.txt").exists()
+        assert (knowledge_root / "guide.txt").read_text(encoding="utf-8") == "knowledge\n"
+        return
+
     assert python_result["results"][1]["value"] == "knowledge\n"
     assert python_result["results"][3]["value"] is False
     assert not (workspace_root / "copy.txt").exists()

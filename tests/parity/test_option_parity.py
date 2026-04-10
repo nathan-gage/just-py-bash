@@ -574,13 +574,15 @@ def test_defense_violation_probe_matches_upstream(
     if kind == "worker" and not worker_defense_module_available:
         python_result_entry = python_result["results"][0]
         reference_result_entry = reference_result["results"][0]
+        python_message = cast(str, python_result_entry["message"])
+        reference_message = cast(str, reference_result_entry["message"])
         assert python_result_entry["kind"] == "error"
         assert reference_result_entry["kind"] == "error"
         assert python_result_entry["type"] == reference_result_entry["type"] == "Error"
-        assert "Cannot find module" in cast(str, python_result_entry["message"])
-        assert "Cannot find module" in cast(str, reference_result_entry["message"])
-        assert "dist/security/index.js" in cast(str, python_result_entry["message"])
-        assert "dist/security/index.js" in cast(str, reference_result_entry["message"])
+        assert "Cannot find module" in python_message
+        assert "Cannot find module" in reference_message
+        assert "dist/security/index.js" in python_message.replace("\\", "/")
+        assert "dist/security/index.js" in reference_message.replace("\\", "/")
         assert python_violations == []
         assert reference_violations == []
         return

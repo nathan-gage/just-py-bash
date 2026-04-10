@@ -30,6 +30,7 @@ The direction for this project is now explicit:
 - Richer initial file parity is now implemented via `FileInit(...)` and `LazyFile(...)`, including differential coverage for callable lazy providers
 - Upstream option parity is now implemented for `fetch`, `logger`, `trace`, `defenseInDepth`, and `coverage`, with API, packaging, and differential coverage
 - Defense-in-depth confidence now includes differential probes against the shipped upstream defense implementations where the relevant defense surface is importable from the shipped backend artifact, and contract coverage for worker-side violation transport everywhere else
+- Known Windows host-backed filesystem divergences are now tracked as explicit expected-behavior assertions instead of being silently skipped or relaxed away
 
 ## Capability matrix
 
@@ -75,6 +76,7 @@ That suite currently covers:
 - key execution-limit parity, including wrapper-focused coverage for loop/heredoc/output plus awk/sed/jq/sqlite/js limit fields
 - filesystem-config parity for overlay, read-write, and mountable configurations
 - session-fs parity for core operations, symlinks, cross-mount copies, read-only overlays, host-persistent write roots, and path failures
+- Windows-only host-backed filesystem divergences are still executed and asserted as the current shipped upstream behavior, so CI will surface future changes there instead of masking them
 - richer initial file parity for metadata-aware files plus static and callable lazy files
 - option parity for `fetch`, `logger`, `trace`, `coverage`, and `defenseInDepth`, including sync/async callback semantics, installed-distribution smoke, and differential coverage for real shipped defense probes
 
