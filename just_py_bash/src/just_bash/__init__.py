@@ -24,6 +24,18 @@ from ._exceptions import (
 )
 from ._fs import FileInit, FsStat, InMemoryFs, LazyFile, MountableFs, MountConfig, OverlayFs, ReadWriteFs
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
+from ._option_hooks import (
+    BashLogger,
+    DefenseInDepthConfig,
+    DefenseViolationCallback,
+    FeatureCoverageWriter,
+    FetchCallback,
+    FetchRequest,
+    FetchResult,
+    SecurityViolation,
+    TraceCallback,
+    TraceEvent,
+)
 from ._options import BashOptions, ExecOptions
 from ._types import AllowedUrl, AllowedUrlEntry, NetworkConfig, ProcessInfo, RequestTransform
 
@@ -49,11 +61,17 @@ __all__ = [
     "BridgeError",
     "BridgeTimeoutError",
     "CommandFailedError",
+    "DefenseInDepthConfig",
+    "DefenseViolationCallback",
     "ExecOptions",
     "ExecResult",
     "ExecutionLimits",
     "FileInit",
     "FsStat",
+    "FeatureCoverageWriter",
+    "FetchCallback",
+    "FetchRequest",
+    "FetchResult",
     "InMemoryFs",
     "MountConfig",
     "MountableFs",
@@ -62,9 +80,13 @@ __all__ = [
     "ProcessInfo",
     "JavaScriptConfig",
     "LazyFile",
+    "BashLogger",
     "ReadWriteFs",
+    "SecurityViolation",
     "JustBashError",
     "RequestTransform",
+    "TraceCallback",
+    "TraceEvent",
     "__version__",
     "main",
 ]

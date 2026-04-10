@@ -4,7 +4,7 @@ import textwrap
 from pathlib import Path
 from typing import Literal
 
-FakeBackendMode = Literal["crash_on_exec", "hang_on_exec", "malformed_exec"]
+FakeBackendMode = Literal["crash_on_exec", "hang_on_exec", "malformed_exec", "defense_violation_event"]
 
 
 def write_fake_backend(path: Path, *, mode: FakeBackendMode) -> None:
@@ -43,6 +43,33 @@ def write_fake_backend(path: Path, *, mode: FakeBackendMode) -> None:
 
                 if MODE == "hang_on_exec" and op == "exec":
                     time.sleep(60)
+                    continue
+
+                if MODE == "defense_violation_event" and op == "exec":
+                    write_message(
+                        {{
+                            "type": "defense_violation",
+                            "violation": {{
+                                "timestamp": 123,
+                                "type": "function_constructor",
+                                "message": "blocked Function constructor",
+                                "path": "globalThis.Function",
+                                "executionId": "fake-exec",
+                            }},
+                        }}
+                    )
+                    write_message(
+                        {{
+                            "id": request["id"],
+                            "ok": True,
+                            "result": {{
+                                "stdout": "ok\\n",
+                                "stderr": "",
+                                "exitCode": 0,
+                                "env": {{}},
+                            }},
+                        }}
+                    )
                     continue
 
                 write_message({{"id": request["id"], "ok": True, "result": None}})

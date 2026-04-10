@@ -6,6 +6,7 @@ const BYTE_TAG = '__just_bash_bytes__';
 
 let nextInvocationId = 1;
 const pendingLazyFiles = new Map();
+const pendingFetches = new Map();
 
 function respond(id, ok, payload) {
   const body = ok
@@ -23,6 +24,41 @@ function emitLazyFileInvocation(providerName) {
     })}\n`,
   );
   return nextInvocationId++;
+}
+
+function emitFetchInvocation(url, options) {
+  process.stdout.write(
+    `${JSON.stringify({
+      type: 'fetch',
+      invocationId: nextInvocationId,
+      url,
+      options,
+    })}\n`,
+  );
+  return nextInvocationId++;
+}
+
+function emitLoggerEvent(level, message, data) {
+  process.stdout.write(
+    `${JSON.stringify({
+      type: 'logger',
+      level,
+      message,
+      data: data ?? null,
+    })}\n`,
+  );
+}
+
+function emitTraceEvent(event) {
+  process.stdout.write(`${JSON.stringify({ type: 'trace', event })}\n`);
+}
+
+function emitCoverageEvent(feature) {
+  process.stdout.write(`${JSON.stringify({ type: 'coverage', feature })}\n`);
+}
+
+function emitDefenseViolationEvent(violation) {
+  process.stdout.write(`${JSON.stringify({ type: 'defense_violation', violation })}\n`);
 }
 
 function errorPayload(error) {
@@ -117,6 +153,75 @@ function decodeFiles(files) {
   return decoded;
 }
 
+function normalizeFetchOptions(options) {
+  const normalized = {};
+  if (options?.method !== undefined) normalized.method = options.method;
+  if (options?.headers !== undefined) {
+    normalized.headers =
+      options.headers instanceof Headers
+        ? Object.fromEntries(options.headers.entries())
+        : options.headers;
+  }
+  if (options?.body !== undefined) normalized.body = options.body;
+  if (options?.followRedirects !== undefined) {
+    normalized.followRedirects = options.followRedirects;
+  }
+  if (options?.timeoutMs !== undefined) normalized.timeoutMs = options.timeoutMs;
+  return normalized;
+}
+
+function normalizeTraceEvent(event) {
+  const normalized = {
+    category: typeof event?.category === 'string' ? event.category : '',
+    name: typeof event?.name === 'string' ? event.name : '',
+    durationMs: Number(event?.durationMs ?? 0),
+  };
+  if (
+    event?.details &&
+    typeof event.details === 'object' &&
+    !Array.isArray(event.details)
+  ) {
+    normalized.details = event.details;
+  }
+  return normalized;
+}
+
+function normalizeSecurityViolation(violation) {
+  const normalized = {
+    timestamp: Number(violation?.timestamp ?? 0),
+    type: typeof violation?.type === 'string' ? violation.type : '',
+    message: typeof violation?.message === 'string' ? violation.message : '',
+    path: typeof violation?.path === 'string' ? violation.path : '',
+  };
+  if (typeof violation?.stack === 'string') normalized.stack = violation.stack;
+  if (typeof violation?.executionId === 'string') {
+    normalized.executionId = violation.executionId;
+  }
+  return normalized;
+}
+
+function decodeDefenseInDepth(spec) {
+  if (typeof spec === 'boolean') {
+    return spec;
+  }
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+    throw new Error('Unsupported defenseInDepth payload');
+  }
+
+  const decoded = {};
+  if (spec.enabled !== undefined) decoded.enabled = spec.enabled;
+  if (spec.auditMode !== undefined) decoded.auditMode = spec.auditMode;
+  if (Array.isArray(spec.excludeViolationTypes)) {
+    decoded.excludeViolationTypes = spec.excludeViolationTypes;
+  }
+  if (spec.onViolationEnabled) {
+    decoded.onViolation = (violation) => {
+      emitDefenseViolationEvent(normalizeSecurityViolation(violation));
+    };
+  }
+  return decoded;
+}
+
 function decodeFs(mod, spec) {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
     throw new Error('Unsupported fs config payload');
@@ -165,6 +270,39 @@ function decodeInitOptions(mod, options) {
   if (options.javascript !== undefined) decoded.javascript = options.javascript;
   if (options.executionLimits !== undefined) {
     decoded.executionLimits = options.executionLimits;
+  }
+  if (options.fetchEnabled) {
+    decoded.fetch = async (url, fetchOptions) => {
+      const invocationId = emitFetchInvocation(url, normalizeFetchOptions(fetchOptions));
+      return await new Promise((resolve, reject) => {
+        pendingFetches.set(invocationId, { resolve, reject });
+      });
+    };
+  }
+  if (options.loggerEnabled) {
+    decoded.logger = {
+      info(message, data) {
+        emitLoggerEvent('info', message, data);
+      },
+      debug(message, data) {
+        emitLoggerEvent('debug', message, data);
+      },
+    };
+  }
+  if (options.traceEnabled) {
+    decoded.trace = (event) => {
+      emitTraceEvent(normalizeTraceEvent(event));
+    };
+  }
+  if (options.coverageEnabled) {
+    decoded.coverage = {
+      hit(feature) {
+        emitCoverageEvent(feature);
+      },
+    };
+  }
+  if (options.defenseInDepth !== undefined) {
+    decoded.defenseInDepth = decodeDefenseInDepth(options.defenseInDepth);
   }
   if (options.network !== undefined) decoded.network = options.network;
   if (options.processInfo !== undefined) decoded.processInfo = options.processInfo;
@@ -241,6 +379,25 @@ function handleLazyFileComplete(message) {
   }
 
   pending.resolve(decodeFileContent(message.content));
+}
+
+function handleFetchComplete(message) {
+  const pending = pendingFetches.get(message.invocationId);
+  if (!pending) {
+    throw new Error(`Unknown fetch invocation: ${message.invocationId}`);
+  }
+
+  pendingFetches.delete(message.invocationId);
+  if (message.error) {
+    const error = new Error(message.error.message ?? 'Fetch callback failed');
+    if (typeof message.error.type === 'string' && message.error.type) {
+      error.name = message.error.type;
+    }
+    pending.reject(error);
+    return;
+  }
+
+  pending.resolve(message.result ?? {});
 }
 
 async function runScenario(message) {
@@ -373,6 +530,16 @@ rl.on('line', (line) => {
       .then(() => handleLazyFileComplete(message))
       .catch((error) => {
         process.stderr.write(`Lazy file completion error: ${String(error)}\n`);
+        process.exitCode = 1;
+      });
+    return;
+  }
+
+  if (message.op === 'fetch_complete') {
+    Promise.resolve()
+      .then(() => handleFetchComplete(message))
+      .catch((error) => {
+        process.stderr.write(`Fetch completion error: ${String(error)}\n`);
         process.exitCode = 1;
       });
     return;

@@ -98,6 +98,45 @@ class JavaScriptConfigWire(TypedDict, total=False):
     bootstrap: str
 
 
+class DefenseInDepthConfigWire(TypedDict, total=False):
+    enabled: bool
+    auditMode: bool
+    onViolationEnabled: bool
+    excludeViolationTypes: Sequence[str]
+
+
+class TraceEventWire(TypedDict, total=False):
+    category: str
+    name: str
+    durationMs: float
+    details: Mapping[str, object]
+
+
+class FetchOptionsWire(TypedDict, total=False):
+    method: str
+    headers: Mapping[str, str]
+    body: str
+    followRedirects: bool
+    timeoutMs: int
+
+
+class FetchResultWire(TypedDict, total=False):
+    status: int
+    statusText: str
+    headers: Mapping[str, str]
+    body: str
+    url: str
+
+
+class SecurityViolationWire(TypedDict, total=False):
+    timestamp: int
+    type: str
+    message: str
+    path: str
+    stack: str | None
+    executionId: str
+
+
 class InMemoryFsWire(TypedDict, total=False):
     kind: Literal["in_memory"]
     files: Mapping[str, InitialFileValueWire]
@@ -143,6 +182,11 @@ class InitOptionsWire(TypedDict, total=False):
     javascript: bool | JavaScriptConfigWire
     commands: Sequence[str]
     customCommandNames: Sequence[str]
+    fetchEnabled: bool
+    loggerEnabled: bool
+    traceEnabled: bool
+    coverageEnabled: bool
+    defenseInDepth: bool | DefenseInDepthConfigWire
     network: NetworkConfig
     processInfo: ProcessInfo
 
@@ -256,9 +300,44 @@ class LazyFileEvent(TypedDict):
     providerName: str
 
 
+class FetchEvent(TypedDict):
+    type: Literal["fetch"]
+    invocationId: int
+    url: str
+    options: FetchOptionsWire
+
+
+class LoggerEvent(TypedDict, total=False):
+    type: Literal["logger"]
+    level: Literal["info", "debug"]
+    message: str
+    data: Mapping[str, object] | None
+
+
+class TraceEventMessage(TypedDict):
+    type: Literal["trace"]
+    event: TraceEventWire
+
+
+class CoverageEvent(TypedDict):
+    type: Literal["coverage"]
+    feature: str
+
+
+class DefenseViolationEvent(TypedDict):
+    type: Literal["defense_violation"]
+    violation: SecurityViolationWire
+
+
 class LazyFileCompleteRequestPayload(TypedDict, total=False):
     invocationId: int
     content: EncodedFileValue
+    error: CustomCommandErrorPayload
+
+
+class FetchCompleteRequestPayload(TypedDict, total=False):
+    invocationId: int
+    result: FetchResultWire
     error: CustomCommandErrorPayload
 
 
