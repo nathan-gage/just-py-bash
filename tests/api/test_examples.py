@@ -82,6 +82,47 @@ CASES = [
             r"(^bootstrapped:5$|js-exec unavailable in this backend build:)",
         ),
     ),
+    ExampleCase(
+        script=Path("examples/parser_and_command_registry.py"),
+        required_fragments=(
+            "=== Command registry helpers ===",
+            "builtins include echo=True",
+            "network commands=['curl']",
+            "ast.type=Script",
+            "serialized=echo hello | grep h && printf 'done",
+        ),
+    ),
+    ExampleCase(
+        script=Path("examples/transforms.py"),
+        required_fragments=(
+            "=== Standalone transform pipeline ===",
+            "tee /tmp/logs/2024-01-15T10-30-45.123Z-000-echo.stdout.txt",
+            "'commands': ['echo', 'exit', 'grep', 'tee']",
+            "=== Session-integrated transform plugins ===",
+            "{'commands': ['echo', 'grep']}",
+        ),
+    ),
+    ExampleCase(
+        script=Path("examples/sandbox.py"),
+        required_fragments=(
+            "=== Sandbox API ===",
+            "inline exit=0 stdout=script says hi",
+            "captured stdout=script says hi",
+            "detached exit=0 stdout=hello from sandbox",
+            "read_back=hello from sandbox",
+        ),
+    ),
+    ExampleCase(
+        script=Path("examples/security_helpers.py"),
+        required_fragments=(
+            "=== Security helpers ===",
+            "total=1",
+            "summary=eval:1:globalThis.eval",
+            "stored_stack=None",
+            "error_message=security violation",
+            "error_type=eval",
+        ),
+    ),
 ]
 
 

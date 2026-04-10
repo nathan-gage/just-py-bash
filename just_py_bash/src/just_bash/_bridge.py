@@ -582,6 +582,15 @@ class NodeBridge:
         *,
         timeout: float | None = None,
     ) -> object:
+        return self.request_raw(op, payload, timeout=timeout)
+
+    def request_raw(
+        self,
+        op: BridgeOperation,
+        payload: Mapping[str, object] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> object:
         self._ensure_open()
 
         response_queue: Queue[WorkerResponse | BaseException] = Queue(maxsize=1)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping, Sequence
-from typing import Self
+from typing import Self, cast
 
 from ._bridge import NodeBridge
 from ._custom_commands import CustomCommands
@@ -11,6 +11,7 @@ from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._option_hooks import BashLogger, DefenseInDepthConfig, FeatureCoverageWriter, FetchCallback, TraceCallback
 from ._options import BashOptions, ExecOptions
 from ._session_fs import SessionFs
+from ._transform import BashTransformResult, TransformPlugin
 from ._types import NetworkConfig, ProcessInfo
 
 
@@ -165,6 +166,16 @@ class Bash:
             timeout=None if options.timeout is None else options.timeout + 5.0,
         )
         return ExecResult.from_wire(payload)
+
+    def register_transform_plugin(self, plugin: TransformPlugin) -> None:
+        self._bridge.request_raw("register_transform_plugin", {"plugin": plugin.to_wire()})
+
+    def transform(self, command_line: str) -> BashTransformResult:
+        raw_payload = self._bridge.request_raw("transform", {"script": command_line})
+        if not isinstance(raw_payload, Mapping):
+            raise TypeError(f"Expected a transform result mapping, got {type(raw_payload).__name__}")
+        payload = cast(Mapping[str, object], raw_payload)
+        return BashTransformResult.from_wire(payload)
 
     def read_text(self, path: str) -> str:
         return self.fs.read_text(path)

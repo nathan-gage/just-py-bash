@@ -6,6 +6,12 @@ from importlib.metadata import PackageNotFoundError, version
 
 from ._api import Bash
 from ._async_api import AsyncBash
+from ._command_registry import (
+    get_command_names,
+    get_javascript_command_names,
+    get_network_command_names,
+    get_python_command_names,
+)
 from ._custom_commands import (
     AsyncCustomCommandCallback,
     AsyncCustomCommandContext,
@@ -37,6 +43,29 @@ from ._option_hooks import (
     TraceEvent,
 )
 from ._options import BashOptions, ExecOptions
+from ._parser import parse, serialize
+from ._sandbox import (
+    AsyncSandbox,
+    AsyncSandboxCommand,
+    Sandbox,
+    SandboxCommand,
+    SandboxOptions,
+    SandboxOutputMessage,
+    SandboxWriteFile,
+)
+from ._security import (
+    SecurityViolationError,
+    SecurityViolationLogger,
+    ViolationSummary,
+    create_console_violation_callback,
+)
+from ._transform import (
+    BashTransformPipeline,
+    BashTransformResult,
+    CommandCollectorPlugin,
+    TeePlugin,
+    TransformPlugin,
+)
 from ._types import AllowedUrl, AllowedUrlEntry, NetworkConfig, ProcessInfo, RequestTransform
 
 try:
@@ -52,14 +81,19 @@ __all__ = [
     "AsyncCustomCommands",
     "AllowedUrl",
     "AllowedUrlEntry",
+    "AsyncSandbox",
+    "AsyncSandboxCommand",
     "BackendError",
     "BackendUnavailableError",
     "BashOptions",
+    "BashTransformPipeline",
+    "BashTransformResult",
     "CustomCommandCallback",
     "CustomCommandContext",
     "CustomCommands",
     "BridgeError",
     "BridgeTimeoutError",
+    "CommandCollectorPlugin",
     "CommandFailedError",
     "DefenseInDepthConfig",
     "DefenseViolationCallback",
@@ -82,13 +116,30 @@ __all__ = [
     "LazyFile",
     "BashLogger",
     "ReadWriteFs",
+    "Sandbox",
+    "SandboxCommand",
+    "SandboxOptions",
+    "SandboxOutputMessage",
+    "SandboxWriteFile",
     "SecurityViolation",
+    "SecurityViolationError",
+    "SecurityViolationLogger",
     "JustBashError",
     "RequestTransform",
+    "TeePlugin",
     "TraceCallback",
     "TraceEvent",
+    "TransformPlugin",
+    "ViolationSummary",
     "__version__",
+    "create_console_violation_callback",
+    "get_command_names",
+    "get_javascript_command_names",
+    "get_network_command_names",
+    "get_python_command_names",
     "main",
+    "parse",
+    "serialize",
 ]
 
 

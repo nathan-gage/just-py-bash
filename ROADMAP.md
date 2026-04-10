@@ -23,12 +23,13 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `187 passed`
+- The current local test count is `209 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 - The session-bound filesystem API is now implemented for the core upstream filesystem operations
 - Richer initial file parity is now implemented via `FileInit(...)` and `LazyFile(...)`, including differential coverage for callable lazy providers
 - Upstream option parity is now implemented for `fetch`, `logger`, `trace`, `defenseInDepth`, and `coverage`, with API, packaging, and differential coverage
+- Broader upstream export parity is now implemented for command-name helpers, parser/serializer helpers, transform pipelines/plugins, integrated `Bash.transform(...)` registration, sandbox helpers, and security helper utilities
 - Defense-in-depth confidence now includes differential probes against the shipped upstream defense implementations where the relevant defense surface is importable from the shipped backend artifact, and contract coverage for worker-side violation transport everywhere else
 - Known Windows host-backed filesystem divergences are now tracked as explicit expected-behavior assertions instead of being silently skipped or relaxed away
 
@@ -58,7 +59,12 @@ The direction for this project is now explicit:
 | Session-bound low-level fs API (`exists`, `stat`, `mkdir`, `readdir`, `rm`, etc.) | Implemented | Strong | `tests/api/test_filesystem_session_api.py`, `tests/parity/test_session_fs_api.py`, `tests/contracts/test_distributions.py` |
 | Richer initial file parity (`FileInit`, `LazyFile`) | Implemented | Strong | `tests/api/test_filesystem_session_api.py`, `tests/parity/test_session_fs_api.py`, `tests/api/test_fs_config_api.py`, `tests/contracts/test_distributions.py` |
 | Upstream option parity (`fetch`, `logger`, `trace`, `defenseInDepth`, `coverage`) | Implemented | Strong | `tests/api/test_option_parity_api.py`, `tests/parity/test_option_parity.py`, `tests/contracts/test_distributions.py` |
-| Broader upstream transform/plugin/parser/security/sandbox exports | Planned | N/A | Roadmap — Broader export parity |
+| Command-name helpers (`get_command_names`, etc.) | Implemented | Strong | `tests/api/test_broader_exports.py`, `tests/parity/test_broader_export_parity.py`, `tests/contracts/test_distributions.py` |
+| Parser / serializer helpers (`parse`, `serialize`) | Implemented | Strong | `tests/api/test_broader_exports.py`, `tests/parity/test_broader_export_parity.py`, `tests/contracts/test_distributions.py` |
+| Transform pipeline / built-in plugins (`BashTransformPipeline`, `CommandCollectorPlugin`, `TeePlugin`) | Implemented | Strong | `tests/api/test_broader_exports.py`, `tests/parity/test_broader_export_parity.py`, `tests/contracts/test_distributions.py` |
+| Integrated transform registration on `Bash` / `AsyncBash` | Implemented | Strong | `tests/api/test_broader_exports.py`, `tests/contracts/test_distributions.py` |
+| Sandbox helpers (`Sandbox`, `AsyncSandbox`) | Implemented | Moderate | `tests/api/test_broader_exports.py`, `tests/contracts/test_distributions.py` |
+| Security helper exports (`SecurityViolationLogger`, `SecurityViolationError`, console callback) | Implemented | Moderate | `tests/api/test_broader_exports.py`, `tests/contracts/test_distributions.py` |
 
 ## What gives confidence today
 
@@ -79,13 +85,14 @@ That suite currently covers:
 - Windows-only host-backed filesystem divergences are still executed and asserted as the current shipped upstream behavior, so CI will surface future changes there instead of masking them
 - richer initial file parity for metadata-aware files plus static and callable lazy files
 - option parity for `fetch`, `logger`, `trace`, `coverage`, and `defenseInDepth`, including sync/async callback semantics, installed-distribution smoke, and differential coverage for real shipped defense probes
+- broader export parity for command-name helpers plus standalone parser / serializer / transform pipeline helpers
 
 ### Public API and contract tests
 
 The rest of the test suite complements parity coverage with Python-specific guarantees:
 
-- API tests for session lifecycle, result handling, constructors, CLI behavior, bridge failure paths, and example smoke coverage
-- contract tests for custom commands, backend selection, optional runtimes, and installation/distribution behavior
+- API tests for session lifecycle, result handling, constructors, CLI behavior, bridge failure paths, parser / transform helpers, sandbox helpers, security helpers, and example smoke coverage
+- contract tests for custom commands, backend selection, optional runtimes, broader export helpers, and installation/distribution behavior
 - smoke coverage for installed wheel/sdist usage outside a repo checkout
 
 ## Completed foundation work
@@ -112,6 +119,11 @@ These milestones are already in place:
 - [x] sync and async contract coverage for option-hook completion and failure semantics
 - [x] differential parity coverage for option hooks, including broader fetch scenarios and real defense probes
 - [x] wheel/sdist smoke coverage for shipped option-hook support
+- [x] Python-facing wrappers for command-name helpers, parser / serializer helpers, transform pipelines/plugins, sandbox helpers, and security helper utilities
+- [x] differential parity coverage for command-name helpers, parser / serializer helpers, and standalone transform pipelines
+- [x] public API coverage for integrated transform registration plus sync / async sandbox helpers
+- [x] focused examples for parser / command registry, transforms, sandbox helpers, and security helpers
+- [x] wheel/sdist smoke coverage for broader export helper surfaces
 
 ## Roadmap
 
@@ -233,20 +245,24 @@ The defense-in-depth portion is intentionally documented against **shipped upstr
 
 ### Broader export parity
 
-After the session API, CLI, filesystem API, and construction options are in place, expand the remaining user-facing upstream exports.
+The broader-export milestone is now in place for the remaining upstream surfaces that map cleanly into Python.
 
-- [ ] add Python-facing wrappers for upstream transform/plugin surfaces
-- [ ] add Python-facing wrappers for parser/security/sandbox surfaces
-- [ ] keep naming close to upstream, using Python `snake_case` for function/field-style surfaces and upstream-style `PascalCase` for classes
-- [ ] add focused examples for each adopted surface
-- [ ] add contract or parity coverage for each adopted surface
+That now includes:
+
+- [x] Python-facing wrappers for command-name helpers
+- [x] Python-facing wrappers for parser / serializer helpers
+- [x] Python-facing wrappers for transform/plugin surfaces via `BashTransformPipeline`, `CommandCollectorPlugin`, `TeePlugin`, and integrated `Bash.register_transform_plugin(...)` / `Bash.transform(...)`
+- [x] Python-facing wrappers for sandbox helpers via `Sandbox` / `AsyncSandbox`
+- [x] Python-facing wrappers for security helper exports via `SecurityViolationLogger`, `SecurityViolationError`, and `create_console_violation_callback(...)`
+- [x] keep naming close to upstream, using Python `snake_case` for function/field-style surfaces and upstream-style `PascalCase` for classes
+- [x] add focused examples for each adopted surface
+- [x] add contract or parity coverage for each adopted surface
 
 ## Near-term order
 
 The current recommended order is:
 
 1. confidence and maintenance work
-2. broader export parity
-3. CLI parity through thin delegation
+2. CLI parity through thin delegation
 
 That ordering is only a sequencing guide. The roadmap itself is organized by parity area so the desired end state stays clear.

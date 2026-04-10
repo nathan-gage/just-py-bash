@@ -391,6 +391,15 @@ class AsyncNodeBridge:
         *,
         timeout: float | None = None,
     ) -> object:
+        return await self.request_raw(op, payload, timeout=timeout)
+
+    async def request_raw(
+        self,
+        op: BridgeOperation,
+        payload: Mapping[str, object] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> object:
         self._ensure_open()
 
         loop = asyncio.get_running_loop()
