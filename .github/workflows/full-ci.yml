@@ -440,7 +440,8 @@ jobs:
           npm_config_script_shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            pnpm install --frozen-lockfile --no-optional
+            pnpm install --frozen-lockfile --ignore-scripts
+            pnpm rebuild esbuild
           else
             pnpm install --frozen-lockfile
           fi
