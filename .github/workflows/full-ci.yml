@@ -297,7 +297,7 @@ jobs:
         uses: actions/download-artifact@v8.0.1
         with:
           name: bundled-runtime-assets-ubuntu
-          path: .
+          path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
 
       - name: Run full CI check suite
         run: make all-ci
@@ -337,7 +337,7 @@ jobs:
         uses: actions/download-artifact@v8.0.1
         with:
           name: bundled-runtime-assets-ubuntu
-          path: .
+          path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
 
       - name: Download backend assets
         uses: actions/download-artifact@v8.0.1
@@ -563,7 +563,7 @@ jobs:
         uses: actions/download-artifact@v8.0.1
         with:
           name: bundled-runtime-assets-ubuntu
-          path: .
+          path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
 
       - name: Restore cached bundled runtime payload
         if: matrix.os != 'ubuntu-latest'
