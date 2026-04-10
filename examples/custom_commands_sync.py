@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import shlex
-from typing import Final
+from typing import Final, TypedDict
 from uuid import uuid4
 
-from just_bash import Bash, CustomCommandContext
+from just_bash import Bash, CustomCommandContext, CustomCommands
 
 PARAGRAPHS: Final[list[str]] = [
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
@@ -15,7 +15,13 @@ PARAGRAPHS: Final[list[str]] = [
 ]
 
 
-def ok(*, stdout: str = "", stderr: str = "", exit_code: int = 0) -> dict[str, str | int]:
+class CommandResult(TypedDict, total=False):
+    stdout: str
+    stderr: str
+    exit_code: int
+
+
+def ok(*, stdout: str = "", stderr: str = "", exit_code: int = 0) -> CommandResult:
     return {
         "stdout": stdout,
         "stderr": stderr,
@@ -99,7 +105,7 @@ def reverse_command(args: list[str], ctx: CustomCommandContext) -> dict[str, str
     return ok(stdout="\n".join(reversed_lines) + trailing_newline)
 
 
-COMMANDS = {
+COMMANDS: CustomCommands = {
     "uuid": uuid_command,
     "json-format": json_format_command,
     "lorem": lorem_command,

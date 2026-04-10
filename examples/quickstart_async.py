@@ -7,16 +7,15 @@ from just_bash import AsyncBash
 
 async def main() -> None:
     async with AsyncBash(cwd="/workspace") as bash:
-        await bash.write_text("note.txt", "hello from async just-py-bash\n")
+        await bash.exec("export NAME=alice; echo 'hello from async shared filesystem' > greeting.txt; cd /tmp")
 
-        result = await bash.exec("cat note.txt")
-        print("cat note.txt")
+        print("shell state resets, filesystem persists")
+        result = await bash.exec('printf "name=%s cwd=%s file=%s\n" "${NAME:-missing}" "$PWD" "$(cat greeting.txt)"')
         print(result.stdout, end="")
 
-        cwd = await bash.get_cwd()
-        env = await bash.get_env()
-        print(f"\ncwd={cwd}")
-        print(f"env vars available={len(env)}")
+        await bash.fs.write_text("note.txt", "written via async bash.fs\n")
+        print("\nread_text('note.txt')")
+        print(await bash.read_text("note.txt"), end="")
 
 
 if __name__ == "__main__":

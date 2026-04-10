@@ -11,6 +11,8 @@ from just_bash import (
 
 script = "echo hello | grep h && printf 'done\\n'"
 ast = parse(script)
+statements = ast.get("statements")
+statement_count = len(statements) if isinstance(statements, list) else 0
 
 print("=== Command registry helpers ===")
 print(f"builtins include echo={'echo' in get_command_names()}")
@@ -20,5 +22,5 @@ print(f"javascript commands={sorted(get_javascript_command_names())}")
 
 print("=== Parser helpers ===")
 print(f"ast.type={ast['type']}")
-print(f"statement_count={len(ast['statements'])}")
+print(f"statement_count={statement_count}")
 print(f"serialized={serialize(ast)}")

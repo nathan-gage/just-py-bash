@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from just_bash import Bash, ExecutionLimits, JavaScriptConfig
+from just_bash import Bash, JavaScriptConfig
 
 
 def section(title: str) -> None:
@@ -21,7 +21,6 @@ def main() -> None:
         cwd="/workspace",
         files={"/workspace/notes.txt": "alpha\nbeta\ngamma\n"},
         env={"GREETING": "hello"},
-        execution_limits=ExecutionLimits(max_command_count=500),
         python=True,
         javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapped';"),
     ) as bash:
@@ -32,6 +31,16 @@ def main() -> None:
                 "printf '%s from %s\\n' \"$TEMP\" \"$(pwd)\"",
                 env={"TEMP": "override"},
                 cwd="/tmp",
+            ).stdout,
+            end="",
+        )
+
+        section("replace_env")
+        print(
+            bash.exec(
+                "printf '%s / %s\\n' \"$ONLY\" \"${GREETING:-unset}\"",
+                replace_env=True,
+                env={"ONLY": "this"},
             ).stdout,
             end="",
         )

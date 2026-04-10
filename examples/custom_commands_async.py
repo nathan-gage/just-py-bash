@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TypedDict
 
-from just_bash import AsyncBash, AsyncCustomCommandContext
+from just_bash import AsyncBash, AsyncCustomCommandContext, AsyncCustomCommands
 
 
-def ok(*, stdout: str = "", stderr: str = "", exit_code: int = 0) -> dict[str, str | int]:
+class CommandResult(TypedDict, total=False):
+    stdout: str
+    stderr: str
+    exit_code: int
+
+
+def ok(*, stdout: str = "", stderr: str = "", exit_code: int = 0) -> CommandResult:
     return {
         "stdout": stdout,
         "stderr": stderr,
@@ -22,7 +29,9 @@ async def annotate_command(args: list[str], ctx: AsyncCustomCommandContext) -> d
 
 
 async def main() -> None:
-    async with AsyncBash(custom_commands={"annotate": annotate_command}) as bash:
+    commands: AsyncCustomCommands = {"annotate": annotate_command}
+
+    async with AsyncBash(custom_commands=commands) as bash:
         print("=== Async Custom Command Demo ===\n")
 
         result = await bash.exec("printf 'one two three' | annotate summary")
