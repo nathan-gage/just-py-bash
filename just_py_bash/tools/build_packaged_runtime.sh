@@ -22,6 +22,18 @@ if [[ ! -f "$VENDOR_DIR/dist/index.js" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$VENDOR_DIR/dist/bin/just-bash.js" ]]; then
+  echo "Missing built vendor/just-bash dist/bin/just-bash.js" >&2
+  echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
+  exit 1
+fi
+
+if [[ ! -f "$VENDOR_DIR/dist/bin/shell/shell.js" ]]; then
+  echo "Missing built vendor/just-bash dist/bin/shell/shell.js" >&2
+  echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
+  exit 1
+fi
+
 if [[ ! -f "$VENDOR_DIR/src/commands/python3/worker.js" ]]; then
   echo "Missing built vendor/just-bash python worker" >&2
   echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
@@ -66,6 +78,7 @@ resolve_quickjs_wasm() {
 }
 
 mkdir -p "$TMP_DIR/runtime/dist/bundle/chunks"
+cp -R "$VENDOR_DIR/dist/bin" "$TMP_DIR/runtime/dist/bin"
 
 (
   cd "$VENDOR_DIR"

@@ -67,4 +67,11 @@ def packaged_runtime_ready(runtime_root: Path) -> bool:
     if not any(path.is_file() for path in entry_candidates):
         return False
 
+    cli_candidates = (
+        runtime_root / "dist" / "bin" / "just-bash.js",
+        runtime_root / "dist" / "bin" / "shell" / "shell.js",
+    )
+    if not all(path.is_file() for path in cli_candidates):
+        return False
+
     return runtime_root.joinpath("vendor", "cpython-emscripten").is_dir()

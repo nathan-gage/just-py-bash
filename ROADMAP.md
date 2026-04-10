@@ -23,13 +23,14 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `209 passed`
+- The current local test count is `213 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 - The session-bound filesystem API is now implemented for the core upstream filesystem operations
 - Richer initial file parity is now implemented via `FileInit(...)` and `LazyFile(...)`, including differential coverage for callable lazy providers
 - Upstream option parity is now implemented for `fetch`, `logger`, `trace`, `defenseInDepth`, and `coverage`, with API, packaging, and differential coverage
 - Broader upstream export parity is now implemented for command-name helpers, parser/serializer helpers, transform pipelines/plugins, integrated `Bash.transform(...)` registration, sandbox helpers, and security helper utilities
+- Upstream CLI parity via thin delegation is now implemented for `just-py-bash` and `just-py-bash-shell`, including packaged runtime `dist/bin/**` assets and installed-distribution coverage
 - Defense-in-depth confidence now includes differential probes against the shipped upstream defense implementations where the relevant defense surface is importable from the shipped backend artifact, and contract coverage for worker-side violation transport everywhere else
 - Known Windows host-backed filesystem divergences are now tracked as explicit expected-behavior assertions instead of being silently skipped or relaxed away
 
@@ -52,8 +53,8 @@ The direction for this project is now explicit:
 | Virtual process info (`process_info=`) | Implemented | Moderate | `tests/parity/test_capability_parity.py` |
 | Backend overrides (`node_command`, `js_entry`, `package_json`) | Implemented | Moderate | Backend override tests, node-provider tests, bridge-failure tests |
 | Alternative constructors (`from_options(...)`) | Implemented | Moderate | `tests/api/test_from_options_and_bridge_failures.py` |
-| Current Python entrypoint CLI (`just-py-bash`) | Implemented | Moderate | `tests/api/test_cli.py`, packaging tests |
-| Upstream CLI parity via delegation | Planned | N/A | Roadmap — CLI parity |
+| Upstream CLI delegation (`just-py-bash`) | Implemented | Strong | `tests/api/test_cli.py`, `tests/contracts/test_distributions.py` |
+| Upstream shell launcher delegation (`just-py-bash-shell`) | Implemented | Moderate | `tests/api/test_cli.py`, `tests/contracts/test_distributions.py` |
 | Vendored/packaged runtime distribution story | Implemented | Moderate | `tests/contracts/test_distributions.py` |
 | Init-time fs config objects (`fs=`) | Implemented | Strong | `tests/api/test_fs_config_api.py`, `tests/parity/test_filesystem_configs.py` |
 | Session-bound low-level fs API (`exists`, `stat`, `mkdir`, `readdir`, `rm`, etc.) | Implemented | Strong | `tests/api/test_filesystem_session_api.py`, `tests/parity/test_session_fs_api.py`, `tests/contracts/test_distributions.py` |
@@ -91,8 +92,8 @@ That suite currently covers:
 
 The rest of the test suite complements parity coverage with Python-specific guarantees:
 
-- API tests for session lifecycle, result handling, constructors, CLI behavior, bridge failure paths, parser / transform helpers, sandbox helpers, security helpers, and example smoke coverage
-- contract tests for custom commands, backend selection, optional runtimes, broader export helpers, and installation/distribution behavior
+- API tests for session lifecycle, result handling, constructors, delegated CLI behavior, bridge failure paths, parser / transform helpers, sandbox helpers, security helpers, and example smoke coverage
+- contract tests for custom commands, backend selection, optional runtimes, broader export helpers, delegated CLI entrypoints, and installation/distribution behavior
 - smoke coverage for installed wheel/sdist usage outside a repo checkout
 
 ## Completed foundation work
@@ -103,7 +104,7 @@ These milestones are already in place:
 - [x] core async `AsyncBash` API
 - [x] public API and parity harness structure
 - [x] generated transcript parity for sync and async sessions
-- [x] source-level CLI coverage for the current Python entrypoint
+- [x] source-level CLI coverage for delegated upstream launchers
 - [x] backend override and bridge failure-path coverage
 - [x] local-fixture parity for `network` and `process_info`
 - [x] broader execution-limit coverage for key current cases
@@ -153,44 +154,46 @@ These should stay wrapper-focused: verify Python-side limit fields, wire transla
 
 ### CLI parity
 
-The CLI path is fixed: the Python package should ship thin launchers over upstream CLI assets rather than maintain a separate Python CLI behavior model.
+The CLI parity milestone is now in place.
+
+The Python package now ships thin launchers over upstream CLI assets rather than maintaining a separate Python CLI behavior model.
 
 #### Upstream CLI asset packaging
 
-- [ ] include upstream `dist/bin/**` assets in the packaged vendored runtime
-- [ ] preserve the upstream `dist/bin/**` relative layout rather than cherry-picking individual CLI chunks
-- [ ] keep CLI entrypoints, chunks, workers, and runtime assets package-relative so upstream path resolution keeps working unchanged
-- [ ] verify the packaged runtime can launch upstream CLI entrypoints from installed wheel/sdist artifacts
+- [x] include upstream `dist/bin/**` assets in the packaged vendored runtime
+- [x] preserve the upstream `dist/bin/**` relative layout rather than cherry-picking individual CLI chunks
+- [x] keep CLI entrypoints, chunks, workers, and runtime assets package-relative so upstream path resolution keeps working unchanged
+- [x] verify the packaged runtime can launch upstream CLI entrypoints from installed wheel/sdist artifacts
 
 #### CLI launcher delegation
 
-- [ ] change `just-py-bash` to forward argv to upstream `just-bash`
-- [ ] forward stdin/stdout/stderr transparently
-- [ ] forward the exact process exit code transparently
-- [ ] avoid reimplementing upstream CLI flag parsing in Python
+- [x] change `just-py-bash` to forward argv to upstream `just-bash`
+- [x] forward stdin/stdout/stderr transparently
+- [x] forward the exact process exit code transparently
+- [x] avoid reimplementing upstream CLI flag parsing in Python
 
 #### Shell launcher parity
 
-- [ ] add a Python package entrypoint for the upstream interactive shell path
-- [ ] delegate that entrypoint to upstream `just-bash-shell`
-- [ ] mirror upstream packaging shape here: because upstream ships `just-bash` and `just-bash-shell` from the main package, ship the corresponding Python launchers from the main Python package as well
-- [ ] keep naming/documentation clear about the Python package binary names versus upstream binary names
+- [x] add a Python package entrypoint for the upstream interactive shell path
+- [x] delegate that entrypoint to upstream `just-bash-shell`
+- [x] mirror upstream packaging shape here: because upstream ships `just-bash` and `just-bash-shell` from the main package, ship the corresponding Python launchers from the main Python package as well
+- [x] keep naming/documentation clear about the Python package binary names versus upstream binary names
 
 #### CLI parity tests
 
-- [ ] add installed-distribution tests for `-c`
-- [ ] add installed-distribution tests for stdin piping
-- [ ] add installed-distribution tests for `--root`
-- [ ] add installed-distribution tests for `--cwd`
-- [ ] add installed-distribution tests for `--json`
-- [ ] add installed-distribution tests for script-file execution
-- [ ] add installed-distribution smoke for the shell entrypoint
+- [x] add installed-distribution tests for `-c`
+- [x] add installed-distribution tests for stdin piping
+- [x] add installed-distribution tests for `--root`
+- [x] add installed-distribution tests for `--cwd`
+- [x] add installed-distribution tests for `--json`
+- [x] add installed-distribution tests for script-file execution
+- [x] add installed-distribution smoke for the shell entrypoint
 
 #### CLI documentation
 
-- [ ] document that CLI semantics are sourced from upstream `just-bash`
-- [ ] document any Python-package-specific launcher naming clearly
-- [ ] remove Python-specific CLI behavior documentation once delegation is in place
+- [x] document that CLI semantics are sourced from upstream `just-bash`
+- [x] document any Python-package-specific launcher naming clearly
+- [x] remove Python-specific CLI behavior documentation once delegation is in place
 
 ### Filesystem parity
 
@@ -260,9 +263,4 @@ That now includes:
 
 ## Near-term order
 
-The current recommended order is:
-
-1. confidence and maintenance work
-2. CLI parity through thin delegation
-
-That ordering is only a sequencing guide. The roadmap itself is organized by parity area so the desired end state stays clear.
+The current roadmap slices are complete. Future roadmap updates should add new parity areas only when the upstream user-facing surface grows or when the Python wrapper intentionally adopts additional scoped APIs.

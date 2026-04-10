@@ -12,6 +12,7 @@ node = ["just-bash-bundled-runtime>=22,<23"]
 
 [project.scripts]
 just-py-bash = "just_bash:main"
+just-py-bash-shell = "just_bash:shell_main"
 
 [tool.uv.sources]
 just-bash-bundled-runtime = { path = "../just_bash_bundled_runtime" }

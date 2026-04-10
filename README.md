@@ -460,9 +460,28 @@ To point at a different `just-bash` backend artifact, set:
 
 If you provide only `js_entry=` or `JUST_BASH_JS_ENTRY`, the wrapper will try to infer the matching `package.json` by walking parent directories. That works for both `dist/index.js` and `dist/bundle/index.js`, but you can still pass `package_json=` / `JUST_BASH_PACKAGE_JSON` explicitly when you want to be precise.
 
+## CLI Launchers
+
+The Python package now ships thin launchers over the upstream CLI assets:
+
+- `just-py-bash` → delegates to upstream `just-bash`
+- `just-py-bash-shell` → delegates to upstream `just-bash-shell`
+
+These launchers forward argv, stdin, stdout, stderr, and the final exit code directly to the upstream CLI implementation. The Python package keeps Python-specific binary names, but CLI semantics come from upstream `just-bash` rather than a separate Python reimplementation.
+
+Examples:
+
+```bash
+just-py-bash -c 'echo hello'
+echo 'pwd' | just-py-bash
+just-py-bash ./script.sh
+just-py-bash --json -c 'echo hello'
+just-py-bash-shell --cwd /
+```
+
 ## Scope Compared to Upstream TypeScript API
 
-The wrapper now covers the main upstream session API, filesystem config and session-fs surfaces, option hooks, command-name helpers, standalone parser/serializer helpers, the built-in transform pipeline/plugin surfaces (`BashTransformPipeline`, `CommandCollectorPlugin`, `TeePlugin`), and upstream-style sandbox/security helper utilities that map cleanly into Python.
+The wrapper now covers the main upstream session API, filesystem config and session-fs surfaces, option hooks, command-name helpers, standalone parser/serializer helpers, the built-in transform pipeline/plugin surfaces (`BashTransformPipeline`, `CommandCollectorPlugin`, `TeePlugin`), upstream-style sandbox/security helper utilities, and thin CLI delegation via `just-py-bash` / `just-py-bash-shell`.
 
 What it still does **not** expose is the full low-level TypeScript filesystem surface or live Python filesystem adapter interfaces from the TypeScript package. The Python wrapper currently covers the session-facing filesystem methods (`exists`, `stat`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, plus the text/bytes helpers), but not the remaining lower-level pieces like `lstat`, `symlink`, `link`, `utimes`, or `readdirWithFileTypes`. If you need those full lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API plus the portable parser / transform / sandbox / security helper surfaces described above, use `just-py-bash`.
 
@@ -518,8 +537,8 @@ The test suite treats upstream `just-bash` as the semantic oracle for current wr
 
 - `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, dedicated filesystem-config parity coverage, and new session-fs parity coverage
 - `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, richer initial files, session fs operations, key execution limits, and the new command-registry / parser / transform helper surfaces using direct upstream comparisons
-- `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, and installed wheel/sdist runtime behavior, including smoke coverage for the broader export helpers
-- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, transform registration, sandbox helpers, security helpers, example smoke coverage, and the current CLI surface
+- `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, installed wheel/sdist runtime behavior, broader export helpers, and delegated CLI entrypoints
+- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, transform registration, sandbox helpers, security helpers, example smoke coverage, and delegated CLI launcher behavior
 
 For day-to-day development, `make all` is the main confidence gate: format, lint, typecheck, and the full test suite.
 
