@@ -405,6 +405,12 @@ def assert_installed_cli_entrypoints_match_upstream(installed: InstalledDistribu
     script_path = cli_root / "script.sh"
     script_path.write_text("printf file-script", encoding="utf-8")
 
+    version_completed = run_installed_console_script(installed, "just-py-bash", "-v")
+    version_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-v")
+
+    help_completed = run_installed_console_script(installed, "just-py-bash", "--help")
+    help_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "--help")
+
     inline_completed = run_installed_console_script(installed, "just-py-bash", "-c", "printf inline")
     inline_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-c", "printf inline")
 
@@ -429,6 +435,12 @@ def assert_installed_cli_entrypoints_match_upstream(installed: InstalledDistribu
     json_completed = run_installed_console_script(installed, "just-py-bash", "-c", "echo hello", "--json")
     json_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-c", "echo hello", "--json")
 
+    failure_completed = run_installed_console_script(installed, "just-py-bash", "-c", "false")
+    failure_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-c", "false")
+
+    unknown_option_completed = run_installed_console_script(installed, "just-py-bash", "--definitely-not-a-flag")
+    unknown_option_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "--definitely-not-a-flag")
+
     script_completed = run_installed_console_script(
         installed,
         "just-py-bash",
@@ -436,6 +448,9 @@ def assert_installed_cli_entrypoints_match_upstream(installed: InstalledDistribu
         cwd=cli_root,
     )
     script_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "./script.sh", cwd=cli_root)
+
+    shell_help_completed = run_installed_console_script(installed, "just-py-bash-shell", "--help")
+    shell_help_reference = run_upstream_cli(UPSTREAM_SHELL_ENTRY, "--help")
 
     shell_completed = run_installed_console_script(
         installed,
@@ -454,11 +469,16 @@ def assert_installed_cli_entrypoints_match_upstream(installed: InstalledDistribu
     )
 
     pairs = [
+        ("version", version_completed, version_reference),
+        ("help", help_completed, help_reference),
         ("inline", inline_completed, inline_reference),
         ("stdin", stdin_completed, stdin_reference),
         ("root/cwd", root_cwd_completed, root_cwd_reference),
         ("json", json_completed, json_reference),
+        ("failure", failure_completed, failure_reference),
+        ("unknown option", unknown_option_completed, unknown_option_reference),
         ("script", script_completed, script_reference),
+        ("shell help", shell_help_completed, shell_help_reference),
         ("shell", shell_completed, shell_reference),
     ]
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+from collections.abc import Callable
 from importlib.metadata import PackageNotFoundError, version
 
 from ._api import Bash
@@ -143,12 +145,23 @@ __all__ = [
 ]
 
 
+def _run_cli_with_error_handling(
+    runner: Callable[[list[str] | None], int],
+    argv: list[str] | None = None,
+) -> int:
+    try:
+        return runner(argv)
+    except BackendUnavailableError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
-    return run_upstream_cli(argv)
+    return _run_cli_with_error_handling(run_upstream_cli, argv)
 
 
 def shell_main(argv: list[str] | None = None) -> int:
-    return run_upstream_shell(argv)
+    return _run_cli_with_error_handling(run_upstream_shell, argv)
 
 
 if __name__ == "__main__":  # pragma: no cover

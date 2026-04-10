@@ -34,7 +34,12 @@ def _run_cli_entrypoint(entrypoint: Path, argv: list[str] | None) -> int:
     forwarded_argv = sys.argv[1:] if argv is None else argv
     command = [*resolve_node_command(), str(entrypoint), *forwarded_argv]
 
-    completed = subprocess.run(command, check=False)
+    try:
+        completed = subprocess.run(command, check=False)
+    except OSError as exc:
+        raise BackendUnavailableError(
+            f"Could not launch the upstream just-bash CLI with command {command[0]!r}: {exc}",
+        ) from exc
     return int(completed.returncode)
 
 
