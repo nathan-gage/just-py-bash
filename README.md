@@ -542,6 +542,3 @@ The test suite treats upstream `just-bash` as the semantic oracle for current wr
 
 For day-to-day development, `make all` is the main confidence gate: format, lint, typecheck, and the full test suite.
 
-## Design Notes
-
-See [`ROADMAP.md`](ROADMAP.md).
