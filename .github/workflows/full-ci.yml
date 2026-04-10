@@ -610,7 +610,7 @@ jobs:
       - name: Smoke test bundled runtime wheel
         shell: bash
         env:
-          UV_FROZEN: ""
+          UV_FROZEN: "0"
         run: |-
           wheel=$(echo dist-node/*.whl)
           uv run --no-project --with "$wheel" python - <<'PY'
