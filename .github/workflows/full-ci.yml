@@ -439,7 +439,11 @@ jobs:
         env:
           npm_config_script_shell: bash
         run: |
-          pnpm install --frozen-lockfile
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            pnpm install --frozen-lockfile --no-optional
+          else
+            pnpm install --frozen-lockfile
+          fi
           pnpm build
 
   runtime-compat:
@@ -532,7 +536,13 @@ jobs:
               handle.write(f'JUST_BASH_TEST_PACKAGED_PACKAGE_JSON={package_json}\n')
 
       - name: Run non-packaging test suite
+        if: matrix.os != 'windows-latest'
         run: uv run pytest -q -m "not packaging"
+
+      - name: Run non-packaging test suite (Windows, parallelized)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: COLUMNS=150 uv run pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
 
   bundled-runtime-packaging:
     name: bundled-runtime wheel / ${{ matrix.os }}
