@@ -57,9 +57,9 @@ def test_overlay_fs_matches_upstream_and_keeps_host_files_unchanged(
 
     assert python_result == reference_result
     if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
-        # Keep enforcing wrapper-vs-reference parity on Windows, but avoid
-        # asserting concrete host-backed fs semantics that the upstream
-        # runtime does not currently deliver there.
+        assert python_result["results"][0]["value"]["stdout"] == ""
+        assert python_result["results"][3]["value"]["stdout"] == "/workspace"
+        assert host_file.read_text(encoding="utf-8") == "seed\n"
         return
 
     assert python_result["results"][0]["value"]["stdout"] == "seed\n"
@@ -112,6 +112,7 @@ def test_read_write_fs_matches_upstream_and_persists_host_writes(
 
     assert python_result == reference_result
     if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        assert python_result["results"][0]["value"]["stdout"] == ""
         return
 
     assert python_result["results"][0]["value"]["stdout"] == "before\n"
@@ -201,6 +202,10 @@ def test_mountable_fs_matches_upstream_for_mixed_mounts_and_cross_mount_copy(
     assert python_result == reference_result
     assert python_result["results"][0]["value"]["stdout"] == "base\n"
     if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        assert python_result["results"][2]["value"]["stdout"] == ""
+        assert python_result["results"][3]["kind"] == "error"
+        assert "read-only file system" in python_result["results"][3]["message"]
+        assert knowledge_file.read_text(encoding="utf-8") == "knowledge\n"
         return
 
     assert python_result["results"][2]["value"]["stdout"] == "knowledge\n"
