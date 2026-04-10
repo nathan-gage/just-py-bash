@@ -18,14 +18,27 @@ pytestmark = [pytest.mark.api, pytest.mark.xdist_group(name="runtime_contracts")
 
 PACKAGE_SRC = ROOT / "just_py_bash" / "src"
 PACKAGED_BACKEND_ROOT = PACKAGE_SRC / "just_bash" / "_vendor" / "just-bash"
-UPSTREAM_CLI_ENTRY = ROOT / "vendor" / "just-bash" / "dist" / "bin" / "just-bash.js"
-UPSTREAM_SHELL_ENTRY = ROOT / "vendor" / "just-bash" / "dist" / "bin" / "shell" / "shell.js"
 CLI_BOOTSTRAP = "from just_bash import main; raise SystemExit(main())"
 SHELL_BOOTSTRAP = "from just_bash import shell_main; raise SystemExit(shell_main())"
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 PTY_TIMEOUT_SECONDS = 5.0
 InteractivePredicate = Callable[[str], bool]
 InteractiveStep = tuple[bytes, InteractivePredicate]
+
+
+def resolve_reference_cli_entry(relative_path: str) -> Path:
+    candidates = [
+        ROOT / "vendor" / "just-bash" / relative_path,
+        PACKAGED_BACKEND_ROOT / relative_path,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise AssertionError(f"Reference CLI entrypoint missing; tried: {candidates}")
+
+
+UPSTREAM_CLI_ENTRY = resolve_reference_cli_entry("dist/bin/just-bash.js")
+UPSTREAM_SHELL_ENTRY = resolve_reference_cli_entry("dist/bin/shell/shell.js")
 
 
 @dataclass(slots=True, frozen=True)
