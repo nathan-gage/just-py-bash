@@ -96,8 +96,10 @@ cp -R "$VENDOR_DIR/dist/bin" "$TMP_DIR/runtime/dist/bin"
 
 python - <<PY
 from pathlib import Path
+import re
 
-chunks_dir = Path(r"$TMP_DIR/runtime/dist/bundle/chunks")
+bundle_root = Path(r"$TMP_DIR/runtime/dist/bundle")
+chunks_dir = bundle_root / "chunks"
 for path in chunks_dir.glob("js-exec-*.js"):
     text = path.read_text()
     updated = text.replace(
@@ -108,6 +110,27 @@ for path in chunks_dir.glob("js-exec-*.js"):
         "new URL('./js-exec-worker.js', import.meta.url)",
     )
     path.write_text(updated)
+
+index_path = bundle_root / "index.js"
+index_text = index_path.read_text()
+flag_coverage_pattern = re.compile(
+    r'''if \(ctx\.coverage(?: && true)?\) \{\n\s+const \{ emitFlagCoverage \} = await import\("(?P<chunk>\./chunks/flag-coverage-[^"]+\.js)"\);\n\s+emitFlagCoverage\(ctx\.coverage, def\.name, args\);\n\s+\}'''
+)
+match = flag_coverage_pattern.search(index_text)
+if match is None:
+    raise SystemExit("Could not patch optional flag-coverage import in packaged runtime bundle")
+
+replacement = f'''if (ctx.coverage) {{
+      try {{
+        const {{ emitFlagCoverage }} = await import("{match.group("chunk")}");
+        emitFlagCoverage(ctx.coverage, def.name, args);
+      }} catch {{
+        // The packaged runtime only needs core coverage hits. Some optional
+        // fuzzing-oriented flag metadata chunks pull in dependencies that are
+        // not safe to initialize in this bundled ESM artifact.
+      }}
+    }}'''
+index_path.write_text(flag_coverage_pattern.sub(replacement, index_text, count=1))
 PY
 
 cp "$VENDOR_DIR/src/commands/python3/worker.js" "$TMP_DIR/runtime/dist/bundle/chunks/worker.js"
