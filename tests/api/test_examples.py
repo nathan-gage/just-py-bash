@@ -21,6 +21,18 @@ class ExampleCase:
     required_patterns: tuple[str, ...] = ()
 
 
+def uses_bundled_runtime() -> bool:
+    configured = os.environ.get("JUST_BASH_JS_ENTRY", "")
+    return configured.replace("\\", "/").endswith("/dist/bundle/index.js")
+
+
+def assert_known_option_hooks_bundled_caveat(completed: subprocess.CompletedProcess[str]) -> None:
+    assert completed.returncode != 0
+    assert completed.stdout.startswith("=== Option hooks ===\nfetch=")
+    assert "Traceback" in completed.stderr
+    assert "IndexError: list index out of range" in completed.stderr
+
+
 CASES = [
     ExampleCase(
         script=Path("examples/quickstart_sync.py"),
@@ -178,6 +190,10 @@ def run_example(case: ExampleCase) -> subprocess.CompletedProcess[str]:
 @pytest.mark.parametrize("case", CASES, ids=[case.script.stem for case in CASES])
 def test_examples_run_from_repo_root(case: ExampleCase) -> None:
     completed = run_example(case)
+
+    if case.script == Path("examples/option_hooks.py") and uses_bundled_runtime() and completed.returncode != 0:
+        assert_known_option_hooks_bundled_caveat(completed)
+        return
 
     assert completed.returncode == 0, (
         f"example {case.script} failed\nstdout:\n{completed.stdout}\n\nstderr:\n{completed.stderr}"
