@@ -240,7 +240,6 @@ jobs:
     needs:
       - detect
       - prepare-backend
-      - prepare-runtime
     if: needs.detect.outputs.run_full == 'true'
     runs-on: ubuntu-latest
 
@@ -302,18 +301,8 @@ jobs:
               handle.write(f'JUST_BASH_TEST_PACKAGED_JS_ENTRY={runtime_entry}\n')
               handle.write(f'JUST_BASH_TEST_PACKAGED_PACKAGE_JSON={package_json}\n')
 
-      - name: Download bundled runtime assets
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: bundled-runtime-assets-ubuntu
-          path: just_bash_bundled_runtime/src/just_bash_bundled_runtime
-
-      - name: Restore bundled runtime executable permissions
-        shell: bash
-        run: chmod +x just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/bin/node
-
       - name: Run packaging-focused contract suite
-        run: uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m packaging
+        run: uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "packaging and not bundled_runtime_packaging"
 
       - name: Build main package distributions
         run: uv build just_py_bash --out-dir dist
