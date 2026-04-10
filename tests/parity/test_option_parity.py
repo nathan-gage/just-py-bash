@@ -538,8 +538,9 @@ def test_defense_violation_probe_matches_upstream(
     runner: ScenarioRunner,
     kind: str,
 ) -> None:
-    if kind == "worker" and not (backend_artifacts.package_json.parent / "dist" / "security" / "index.js").exists():
-        pytest.skip("WorkerDefenseInDepth is not shipped as an importable module in this backend artifact")
+    worker_defense_module_available = (
+        backend_artifacts.package_json.parent / "dist" / "security" / "index.js"
+    ).exists()
 
     api = public_api()
     python_violations: list[dict[str, object]] = []
@@ -569,6 +570,20 @@ def test_defense_violation_probe_matches_upstream(
         operations=[op_probe_defense_violation(kind)],
         backend_artifacts=backend_artifacts,
     )
+
+    if kind == "worker" and not worker_defense_module_available:
+        python_result_entry = python_result["results"][0]
+        reference_result_entry = reference_result["results"][0]
+        assert python_result_entry["kind"] == "error"
+        assert reference_result_entry["kind"] == "error"
+        assert python_result_entry["type"] == reference_result_entry["type"] == "Error"
+        assert "Cannot find module" in cast(str, python_result_entry["message"])
+        assert "Cannot find module" in cast(str, reference_result_entry["message"])
+        assert "dist/security/index.js" in cast(str, python_result_entry["message"])
+        assert "dist/security/index.js" in cast(str, reference_result_entry["message"])
+        assert python_violations == []
+        assert reference_violations == []
+        return
 
     assert python_result == reference_result
     expected_violation_count = 0 if kind == "main" else 1
