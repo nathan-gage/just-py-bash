@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import argparse
-import sys
 from importlib.metadata import PackageNotFoundError, version
 
 from ._api import Bash
 from ._async_api import AsyncBash
+from ._cli import run_upstream_cli, run_upstream_shell
 from ._command_registry import (
     get_command_names,
     get_javascript_command_names,
@@ -140,53 +139,16 @@ __all__ = [
     "main",
     "parse",
     "serialize",
+    "shell_main",
 ]
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="just-py-bash",
-        description="Execute a command through the Python just-bash wrapper.",
-    )
-    parser.add_argument("command", nargs="?", help="Shell command to execute")
-    parser.add_argument("--cwd", help="Session cwd")
-    parser.add_argument(
-        "--python",
-        action="store_true",
-        help="Enable just-bash's optional python/python3 commands",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=float,
-        default=None,
-        help="Abort execution after N seconds",
-    )
-    parser.add_argument(
-        "--version",
-        action="store_true",
-        help="Print the wrapper version and exit",
-    )
+    return run_upstream_cli(argv)
 
-    args = parser.parse_args(argv)
 
-    if args.version:
-        print(__version__)
-        return 0
-
-    if not args.command:
-        parser.print_help()
-        return 0
-
-    stdin = None if sys.stdin.isatty() else sys.stdin.read()
-
-    with Bash(cwd=args.cwd, python=args.python) as bash:
-        result = bash.exec(args.command, stdin=stdin, timeout=args.timeout)
-
-    if result.stdout:
-        sys.stdout.write(result.stdout)
-    if result.stderr:
-        sys.stderr.write(result.stderr)
-    return result.exit_code
+def shell_main(argv: list[str] | None = None) -> int:
+    return run_upstream_shell(argv)
 
 
 if __name__ == "__main__":  # pragma: no cover

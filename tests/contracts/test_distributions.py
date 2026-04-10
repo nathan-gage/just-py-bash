@@ -14,10 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.harness import ROOT
+from tests.support.harness import ROOT, resolve_node_command
 
 PACKAGE_ROOT = ROOT / "just_py_bash"
 RUNTIME_PACKAGE_ROOT = ROOT / "just_bash_bundled_runtime"
+UPSTREAM_CLI_ENTRY = ROOT / "vendor" / "just-bash" / "dist" / "bin" / "just-bash.js"
+UPSTREAM_SHELL_ENTRY = ROOT / "vendor" / "just-bash" / "dist" / "bin" / "shell" / "shell.js"
 
 pytestmark = [
     pytest.mark.contract,
@@ -131,12 +133,31 @@ def run_installed_console_script(
     installed: InstalledDistribution,
     script_name: str,
     *args: str,
+    stdin: str | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     script = installed.bin_dir / (f"{script_name}.exe" if sys.platform == "win32" else script_name)
     return subprocess.run(
         [str(script), *args],
-        cwd=installed.root,
+        cwd=installed.root if cwd is None else cwd,
         env=installed.env,
+        input=stdin,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def run_upstream_cli(
+    entrypoint: Path,
+    *args: str,
+    stdin: str | None = None,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [*resolve_node_command(), str(entrypoint), *args],
+        cwd=ROOT if cwd is None else cwd,
+        input=stdin,
         text=True,
         capture_output=True,
         check=False,
@@ -377,6 +398,88 @@ def assert_installed_broader_export_surfaces_work(installed: InstalledDistributi
     assert payload["exec_commands"] == ["cat", "echo"]
 
 
+def assert_installed_cli_entrypoints_match_upstream(installed: InstalledDistribution, *, label: str) -> None:
+    cli_root = installed.root / "cli-root"
+    (cli_root / "sub").mkdir(parents=True)
+    (cli_root / "sub" / "note.txt").write_text("root-note\n", encoding="utf-8")
+    script_path = cli_root / "script.sh"
+    script_path.write_text("printf file-script", encoding="utf-8")
+
+    inline_completed = run_installed_console_script(installed, "just-py-bash", "-c", "printf inline")
+    inline_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-c", "printf inline")
+
+    stdin_completed = run_installed_console_script(
+        installed,
+        "just-py-bash",
+        stdin="echo hello from stdin\n",
+    )
+    stdin_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, stdin="echo hello from stdin\n")
+
+    root_cwd_args = (
+        "-c",
+        "pwd; cat note.txt",
+        "--root",
+        str(cli_root),
+        "--cwd",
+        "/home/user/project/sub",
+    )
+    root_cwd_completed = run_installed_console_script(installed, "just-py-bash", *root_cwd_args)
+    root_cwd_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, *root_cwd_args)
+
+    json_completed = run_installed_console_script(installed, "just-py-bash", "-c", "echo hello", "--json")
+    json_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-c", "echo hello", "--json")
+
+    script_completed = run_installed_console_script(
+        installed,
+        "just-py-bash",
+        "./script.sh",
+        cwd=cli_root,
+    )
+    script_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "./script.sh", cwd=cli_root)
+
+    shell_completed = run_installed_console_script(
+        installed,
+        "just-py-bash-shell",
+        "--cwd",
+        "/",
+        stdin="pwd\ncat note.txt\n",
+        cwd=cli_root / "sub",
+    )
+    shell_reference = run_upstream_cli(
+        UPSTREAM_SHELL_ENTRY,
+        "--cwd",
+        "/",
+        stdin="pwd\ncat note.txt\n",
+        cwd=cli_root / "sub",
+    )
+
+    pairs = [
+        ("inline", inline_completed, inline_reference),
+        ("stdin", stdin_completed, stdin_reference),
+        ("root/cwd", root_cwd_completed, root_cwd_reference),
+        ("json", json_completed, json_reference),
+        ("script", script_completed, script_reference),
+        ("shell", shell_completed, shell_reference),
+    ]
+
+    for name, completed, reference in pairs:
+        assert completed.returncode == reference.returncode, (
+            f"{label} {name} exit code mismatch\n"
+            f"installed stdout:\n{completed.stdout}\ninstalled stderr:\n{completed.stderr}\n"
+            f"reference stdout:\n{reference.stdout}\nreference stderr:\n{reference.stderr}"
+        )
+        assert completed.stdout == reference.stdout, (
+            f"{label} {name} stdout mismatch\n"
+            f"installed stdout:\n{completed.stdout}\ninstalled stderr:\n{completed.stderr}\n"
+            f"reference stdout:\n{reference.stdout}\nreference stderr:\n{reference.stderr}"
+        )
+        assert completed.stderr == reference.stderr, (
+            f"{label} {name} stderr mismatch\n"
+            f"installed stdout:\n{completed.stdout}\ninstalled stderr:\n{completed.stderr}\n"
+            f"reference stdout:\n{reference.stdout}\nreference stderr:\n{reference.stderr}"
+        )
+
+
 @pytest.fixture(scope="module")
 def installed_wheel() -> InstalledDistribution:
     root = Path(tempfile.mkdtemp(prefix="just-py-bash-installed-wheel-"))
@@ -410,14 +513,13 @@ def test_installed_wheel_boots_without_repo_checkout(installed_wheel: InstalledD
     assert lines[-1] == "wheel-runtime"
 
 
-def test_installed_wheel_console_script_runs_without_repo_checkout(
+def test_installed_wheel_cli_entrypoints_match_upstream(
     installed_wheel: InstalledDistribution,
 ) -> None:
-    completed = run_installed_console_script(installed_wheel, "just-py-bash", "printf wheel-cli")
-    assert_packaged_runtime_available(completed, label="installed wheel CLI smoke test")
-
-    assert completed.stdout == "wheel-cli"
-    assert completed.stderr == ""
+    assert_installed_cli_entrypoints_match_upstream(
+        installed_wheel,
+        label="installed wheel CLI parity test",
+    )
 
 
 def test_installed_wheel_supports_stateful_api_session(installed_wheel: InstalledDistribution) -> None:
@@ -488,14 +590,13 @@ def test_installed_sdist_boots_without_repo_checkout(installed_sdist: InstalledD
     assert lines[-1] == "sdist-runtime"
 
 
-def test_installed_sdist_console_script_runs_without_repo_checkout(
+def test_installed_sdist_cli_entrypoints_match_upstream(
     installed_sdist: InstalledDistribution,
 ) -> None:
-    completed = run_installed_console_script(installed_sdist, "just-py-bash", "printf sdist-cli")
-    assert_packaged_runtime_available(completed, label="installed sdist CLI smoke test")
-
-    assert completed.stdout == "sdist-cli"
-    assert completed.stderr == ""
+    assert_installed_cli_entrypoints_match_upstream(
+        installed_sdist,
+        label="installed sdist CLI parity test",
+    )
 
 
 def test_installed_sdist_supports_session_fs_api_and_richer_initial_files(
@@ -557,6 +658,8 @@ def test_wheel_contains_packaged_just_bash_runtime(tmp_path: Path) -> None:
         )
     )
     assert any(name.startswith("just_bash/_vendor/just-bash/vendor/cpython-emscripten/") for name in names)
+    assert "just_bash/_vendor/just-bash/dist/bin/just-bash.js" in names
+    assert "just_bash/_vendor/just-bash/dist/bin/shell/shell.js" in names
 
 
 def test_sdist_contains_packaged_just_bash_runtime(tmp_path: Path) -> None:
@@ -572,6 +675,8 @@ def test_sdist_contains_packaged_just_bash_runtime(tmp_path: Path) -> None:
         for name in names
     )
     assert any("/src/just_bash/_vendor/just-bash/vendor/cpython-emscripten/" in name for name in names)
+    assert any(name.endswith("/src/just_bash/_vendor/just-bash/dist/bin/just-bash.js") for name in names)
+    assert any(name.endswith("/src/just_bash/_vendor/just-bash/dist/bin/shell/shell.js") for name in names)
 
 
 def test_bundled_runtime_wheel_is_platform_specific_and_installs(tmp_path: Path) -> None:
