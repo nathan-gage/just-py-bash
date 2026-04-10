@@ -435,6 +435,25 @@ def assert_installed_cli_entrypoints_match_upstream(installed: InstalledDistribu
     json_completed = run_installed_console_script(installed, "just-py-bash", "-c", "echo hello", "--json")
     json_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-c", "echo hello", "--json")
 
+    allow_write_completed = run_installed_console_script(
+        installed,
+        "just-py-bash",
+        "-c",
+        "echo write-ok > out.txt && cat out.txt",
+        "--allow-write",
+        cwd=cli_root,
+    )
+    allow_write_reference = run_upstream_cli(
+        UPSTREAM_CLI_ENTRY,
+        "-c",
+        "echo write-ok > out.txt && cat out.txt",
+        "--allow-write",
+        cwd=cli_root,
+    )
+
+    errexit_completed = run_installed_console_script(installed, "just-py-bash", "-e", "-c", "false; echo nope")
+    errexit_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-e", "-c", "false; echo nope")
+
     failure_completed = run_installed_console_script(installed, "just-py-bash", "-c", "false")
     failure_reference = run_upstream_cli(UPSTREAM_CLI_ENTRY, "-c", "false")
 
@@ -475,6 +494,8 @@ def assert_installed_cli_entrypoints_match_upstream(installed: InstalledDistribu
         ("stdin", stdin_completed, stdin_reference),
         ("root/cwd", root_cwd_completed, root_cwd_reference),
         ("json", json_completed, json_reference),
+        ("allow-write", allow_write_completed, allow_write_reference),
+        ("errexit", errexit_completed, errexit_reference),
         ("failure", failure_completed, failure_reference),
         ("unknown option", unknown_option_completed, unknown_option_reference),
         ("script", script_completed, script_reference),

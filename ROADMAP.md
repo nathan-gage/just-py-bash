@@ -23,7 +23,7 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `219 passed`
+- The current local test count is `221 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 - The session-bound filesystem API is now implemented for the core upstream filesystem operations
@@ -188,6 +188,8 @@ The Python package now ships thin launchers over upstream CLI assets rather than
 - [x] add installed-distribution tests for `--root`
 - [x] add installed-distribution tests for `--cwd`
 - [x] add installed-distribution tests for `--json`
+- [x] add installed-distribution tests for `--allow-write`
+- [x] add installed-distribution tests for `-e` / `--errexit`
 - [x] add installed-distribution tests for nonzero exit propagation
 - [x] add installed-distribution tests for invalid-flag passthrough
 - [x] add installed-distribution tests for script-file execution
