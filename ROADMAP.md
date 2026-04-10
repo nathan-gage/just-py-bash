@@ -23,7 +23,7 @@ The direction for this project is now explicit:
 ## Current snapshot
 
 - `make all` passes locally
-- The current local test count is `221 passed`
+- The current local test count is `225 passed`
 - Sync and async session APIs are well covered by public API tests plus wrapper-vs-upstream parity tests
 - Init-time filesystem config parity (`fs=`) is now implemented for the upstream-style filesystem constructors
 - The session-bound filesystem API is now implemented for the core upstream filesystem operations
@@ -92,7 +92,7 @@ That suite currently covers:
 
 The rest of the test suite complements parity coverage with Python-specific guarantees:
 
-- API tests for session lifecycle, result handling, constructors, delegated CLI behavior, bridge failure paths, parser / transform helpers, sandbox helpers, security helpers, and example smoke coverage
+- API tests for session lifecycle, result handling, constructors, delegated CLI behavior, bridge failure paths, parser / transform helpers, sandbox helpers, security helpers, example smoke coverage, and POSIX interactive shell PTY / SIGINT behavior
 - contract tests for custom commands, backend selection, optional runtimes, broader export helpers, delegated CLI entrypoints, and installation/distribution behavior
 - smoke coverage for installed wheel/sdist usage outside a repo checkout
 
@@ -195,6 +195,8 @@ The Python package now ships thin launchers over upstream CLI assets rather than
 - [x] add installed-distribution tests for script-file execution
 - [x] add installed-distribution smoke for the shell entrypoint
 - [x] add installed-distribution help coverage for the shell entrypoint
+- [x] add POSIX source-level PTY parity coverage for interactive shell transcripts
+- [x] add POSIX source-level SIGINT coverage for delegated CLI execution
 
 #### CLI documentation
 
