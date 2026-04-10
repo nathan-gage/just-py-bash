@@ -28,6 +28,7 @@ BridgeOperation: TypeAlias = Literal[
     "exists",
     "fetch_complete",
     "get_cwd",
+    "probe_defense_violation",
     "get_env",
     "info",
     "init",

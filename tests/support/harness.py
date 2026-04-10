@@ -540,6 +540,12 @@ def to_reference_operation(operation: Mapping[str, Any]) -> dict[str, Any]:
             "content": encode_file_value(operation["content"]),
         }
 
+    if op == "probe_defense_violation":
+        return {
+            "op": "probe_defense_violation",
+            "kind": operation["kind"],
+        }
+
     return dict(operation)
 
 
@@ -962,6 +968,10 @@ def op_get_cwd() -> dict[str, Any]:
     return {"op": "get_cwd"}
 
 
+def op_probe_defense_violation(kind: str) -> dict[str, Any]:
+    return {"op": "probe_defense_violation", "kind": kind}
+
+
 def run_python_scenario(
     *,
     init_kwargs: Mapping[str, Any],
@@ -1023,6 +1033,10 @@ def run_python_scenario(
                     results.append(wrap_success(bash.get_env()))
                 elif op == "get_cwd":
                     results.append(wrap_success(bash.get_cwd()))
+                elif op == "probe_defense_violation":
+                    results.append(
+                        wrap_success(bash._bridge.request("probe_defense_violation", {"kind": operation["kind"]}))
+                    )
                 else:  # pragma: no cover - defensive
                     raise AssertionError(f"unknown op: {op}")
             except Exception as error:
@@ -1099,6 +1113,12 @@ def run_async_python_scenario(
                         results.append(wrap_success(await bash.get_env()))
                     elif op == "get_cwd":
                         results.append(wrap_success(await bash.get_cwd()))
+                    elif op == "probe_defense_violation":
+                        results.append(
+                            wrap_success(
+                                await bash.bridge_request("probe_defense_violation", {"kind": operation["kind"]})
+                            )
+                        )
                     else:  # pragma: no cover - defensive
                         raise AssertionError(f"unknown op: {op}")
                 except Exception as error:
@@ -1177,6 +1197,7 @@ __all__ = [
     "op_exists",
     "op_get_cwd",
     "op_get_env",
+    "op_probe_defense_violation",
     "op_mkdir",
     "op_mv",
     "op_readdir",

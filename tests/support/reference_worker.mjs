@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
@@ -220,6 +221,55 @@ function decodeDefenseInDepth(spec) {
     };
   }
   return decoded;
+}
+
+async function runDefenseViolationProbe(mod, packageJsonPath, kind) {
+  if (kind === 'main') {
+    const violations = [];
+    const box = mod.DefenseInDepthBox.getInstance({
+      enabled: true,
+      auditMode: true,
+      onViolation: (violation) => {
+        violations.push(violation);
+        emitDefenseViolationEvent(normalizeSecurityViolation(violation));
+      },
+    });
+    const handle = box.activate();
+    try {
+      const returnValue = await handle.run(async () => {
+        const fn = new Function('return 42');
+        return fn();
+      });
+      return { kind, returnValue, violationCount: violations.length };
+    } finally {
+      handle.deactivate();
+      mod.DefenseInDepthBox.resetInstance();
+    }
+  }
+
+  if (kind === 'worker') {
+    const securityModuleUrl = pathToFileURL(
+      join(dirname(packageJsonPath), 'dist', 'security', 'index.js'),
+    ).href;
+    const securityModule = await import(securityModuleUrl);
+    const violations = [];
+    const defense = new securityModule.WorkerDefenseInDepth({
+      auditMode: true,
+      excludeViolationTypes: ['process_stdout', 'process_stderr'],
+      onViolation: (violation) => {
+        violations.push(violation);
+        emitDefenseViolationEvent(normalizeSecurityViolation(violation));
+      },
+    });
+    try {
+      const fn = new Function('return 42');
+      return { kind, returnValue: fn(), violationCount: violations.length };
+    } finally {
+      defense.deactivate();
+    }
+  }
+
+  throw new Error(`Unknown defense probe kind: ${String(kind)}`);
 }
 
 function decodeFs(mod, spec) {
@@ -494,6 +544,11 @@ async function runScenario(message) {
           break;
         case 'get_cwd':
           results.push(wrapSuccess(bash.getCwd()));
+          break;
+        case 'probe_defense_violation':
+          results.push(
+            wrapSuccess(await runDefenseViolationProbe(mod, message.packageJson, operation.kind)),
+          );
           break;
         default:
           throw new Error(`Unknown operation: ${operation.op}`);
