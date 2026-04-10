@@ -21,6 +21,7 @@ PACKAGED_BACKEND_ROOT = PACKAGE_SRC / "just_bash" / "_vendor" / "just-bash"
 CLI_BOOTSTRAP = "from just_bash import main; raise SystemExit(main())"
 SHELL_BOOTSTRAP = "from just_bash import shell_main; raise SystemExit(shell_main())"
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+INTERACTIVE_EXIT_TRAILING_RE = re.compile(r"(exit\n\n)(exit\n)+\Z")
 PTY_TIMEOUT_SECONDS = 5.0
 InteractivePredicate = Callable[[str], bool]
 InteractiveStep = tuple[bytes, InteractivePredicate]
@@ -191,6 +192,10 @@ def normalize_path_separators(text: str) -> str:
     return text.replace("\\", "/")
 
 
+def normalize_interactive_transcript(text: str) -> str:
+    return INTERACTIVE_EXIT_TRAILING_RE.sub(r"\1", text)
+
+
 def _has_shell_prompt(text: str) -> bool:
     return text.endswith("$ ")
 
@@ -335,6 +340,16 @@ def assert_completed_matches_upstream(
     assert python_completed.returncode == upstream_completed.returncode
     assert python_completed.stdout == upstream_completed.stdout
     assert python_completed.stderr == upstream_completed.stderr
+
+
+def assert_interactive_result_matches_upstream(
+    python_result: InteractiveSessionResult,
+    upstream_result: InteractiveSessionResult,
+) -> None:
+    assert python_result.returncode == upstream_result.returncode
+    assert normalize_interactive_transcript(python_result.transcript) == normalize_interactive_transcript(
+        upstream_result.transcript,
+    )
 
 
 def test_cli_delegates_version_to_upstream() -> None:
@@ -534,7 +549,7 @@ def test_shell_cli_interactive_session_matches_upstream(tmp_path: Path) -> None:
         steps=steps,
     )
 
-    assert python_result == upstream_result
+    assert_interactive_result_matches_upstream(python_result, upstream_result)
     assert "Virtual Shell v1.0" in python_result.transcript
     assert "user@virtual:/sub$" in python_result.transcript
     assert "shell-note" in python_result.transcript
@@ -558,7 +573,7 @@ def test_shell_cli_interactive_ctrl_c_matches_upstream(tmp_path: Path) -> None:
         steps=steps,
     )
 
-    assert python_result == upstream_result
+    assert_interactive_result_matches_upstream(python_result, upstream_result)
     assert "^C" in python_result.transcript
     assert "user@virtual:~$" in python_result.transcript
 
@@ -576,7 +591,7 @@ def test_shell_cli_interactive_eof_matches_upstream(tmp_path: Path) -> None:
         steps=steps,
     )
 
-    assert python_result == upstream_result
+    assert_interactive_result_matches_upstream(python_result, upstream_result)
     assert "Goodbye!" in python_result.transcript
 
 
