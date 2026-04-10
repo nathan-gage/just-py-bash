@@ -79,7 +79,7 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: checks
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
@@ -87,15 +87,23 @@ jobs:
         run: make install-python
 
       - name: Format check
+        env:
+          UV_NO_SYNC: "1"
         run: make format-check
 
       - name: Lint
+        env:
+          UV_NO_SYNC: "1"
         run: make lint
 
       - name: Typecheck (mypy)
+        env:
+          UV_NO_SYNC: "1"
         run: make typecheck-mypy
 
       - name: Typecheck (pyright)
+        env:
+          UV_NO_SYNC: "1"
         run: make typecheck-pyright
 
   tests:
@@ -123,7 +131,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: tests-${{ matrix.python-version }}
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
@@ -171,6 +179,8 @@ jobs:
               handle.write(f'JUST_BASH_TEST_PACKAGED_PACKAGE_JSON={package_json}\n')
 
       - name: Run non-packaging test suite
+        env:
+          UV_NO_SYNC: "1"
         run: make test-non-packaging
 
   required:

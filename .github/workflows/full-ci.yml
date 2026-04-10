@@ -246,7 +246,7 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: full
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
@@ -255,8 +255,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install Python development dependencies
-        run: make install-python
+      - name: Install Python test dependencies
+        run: uv sync --frozen --only-group dev
 
       - name: Download backend assets
         uses: actions/download-artifact@v8.0.1
@@ -303,8 +303,8 @@ jobs:
         shell: bash
         run: chmod +x just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/bin/node
 
-      - name: Run full CI check suite
-        run: make all-ci
+      - name: Run packaging-focused contract suite
+        run: uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m packaging
 
       - name: Build main package distributions
         run: uv build just_py_bash --out-dir dist
@@ -330,7 +330,7 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: bundled-node
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
@@ -385,7 +385,7 @@ jobs:
       - name: Verify bundled Node works without a system node on PATH
         shell: bash
         run: |
-          PYTHONPATH=just_py_bash/src uv run --with ./just_bash_bundled_runtime python - <<'PY'
+          PYTHONPATH=just_py_bash/src uv run --no-sync --with ./just_bash_bundled_runtime python - <<'PY'
           import os
           import sys
 
@@ -489,7 +489,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: compat-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.node-version }}
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
@@ -538,12 +538,12 @@ jobs:
 
       - name: Run non-packaging test suite
         if: matrix.os != 'windows-latest'
-        run: uv run pytest -q -m "not packaging"
+        run: uv run --no-sync pytest -q -m "not packaging"
 
       - name: Run non-packaging test suite (Windows, parallelized)
         if: matrix.os == 'windows-latest'
         shell: bash
-        run: COLUMNS=150 uv run pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
+        run: COLUMNS=150 uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
 
   bundled-runtime-packaging:
     name: bundled-runtime wheel / ${{ matrix.os }}
@@ -573,7 +573,7 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
-          cache-python: true
+          cache-python: false
           cache-suffix: bundled-runtime-packaging
           cache-dependency-glob: ${{ env.UV_CACHE_DEPENDENCY_GLOB }}
 
@@ -602,13 +602,15 @@ jobs:
 
       - name: Vendor bundled runtime payload
         if: matrix.os != 'ubuntu-latest' && steps.runtime-cache.outputs.cache-hit != 'true'
-        run: uv run --no-project python just_bash_bundled_runtime/tools/vendor_runtime.py
+        run: python just_bash_bundled_runtime/tools/vendor_runtime.py
 
       - name: Build bundled runtime wheel
         run: uv build just_bash_bundled_runtime --wheel --out-dir dist-node
 
       - name: Smoke test bundled runtime wheel
         shell: bash
+        env:
+          UV_FROZEN: ""
         run: |-
           wheel=$(echo dist-node/*.whl)
           uv run --no-project --with "$wheel" python - <<'PY'
