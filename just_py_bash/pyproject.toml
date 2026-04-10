@@ -1,6 +1,6 @@
 [project]
 name = "just-py-bash"
-version = "2.14.0"
+version = "2.14.1"
 description = "A Python wrapper around the just-bash virtual shell"
 readme = "README.md"
 authors = [{ name = "Nathan Gage", email = "nathan@sweetspot.so" }]
