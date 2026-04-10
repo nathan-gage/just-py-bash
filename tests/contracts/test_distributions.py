@@ -312,6 +312,71 @@ def assert_installed_option_hooks_work(installed: InstalledDistribution, *, labe
     assert any(hit.startswith("bash:") or hit.startswith("cmd:") for hit in payload["coverage_hits"])
 
 
+def assert_installed_broader_export_surfaces_work(installed: InstalledDistribution, *, label: str) -> None:
+    completed = run_installed_python(
+        installed,
+        (
+            "import json\n"
+            "from datetime import UTC, datetime\n"
+            "from just_bash import (\n"
+            "    Bash,\n"
+            "    BashTransformPipeline,\n"
+            "    CommandCollectorPlugin,\n"
+            "    Sandbox,\n"
+            "    SandboxOptions,\n"
+            "    SecurityViolation,\n"
+            "    SecurityViolationLogger,\n"
+            "    TeePlugin,\n"
+            "    get_command_names,\n"
+            "    parse,\n"
+            "    serialize,\n"
+            ")\n"
+            "ast = parse('echo hello | cat')\n"
+            "serialized = serialize(ast)\n"
+            "pipeline = (\n"
+            "    BashTransformPipeline()\n"
+            "    .use(TeePlugin(output_dir='/tmp/logs', timestamp=datetime(2024, 1, 15, 10, 30, 45, 123000, tzinfo=UTC)))\n"
+            "    .use(CommandCollectorPlugin())\n"
+            "    .transform('echo hello | cat')\n"
+            ")\n"
+            "logger = SecurityViolationLogger(include_stack_traces=False)\n"
+            "logger.record(SecurityViolation(timestamp=1, type='eval', message='blocked', path='globalThis.eval', stack='stack'))\n"
+            "with Sandbox.create(SandboxOptions(cwd='/app')) as sandbox:\n"
+            "    sandbox.write_files({'/app/note.txt': 'note\\n'})\n"
+            "    sandbox_result = sandbox.run_command('cat /app/note.txt')\n"
+            "with Bash() as bash:\n"
+            "    bash.register_transform_plugin(CommandCollectorPlugin())\n"
+            "    transformed = bash.transform('echo hello | cat')\n"
+            "    exec_result = bash.exec('echo hello | cat')\n"
+            "payload = {\n"
+            "    'ast_type': ast['type'],\n"
+            "    'serialized': serialized,\n"
+            "    'command_names_has_echo': 'echo' in get_command_names(),\n"
+            "    'pipeline_commands': pipeline.metadata['commands'],\n"
+            "    'pipeline_has_tee': 'tee /tmp/logs/' in pipeline.script,\n"
+            "    'logger_total': logger.get_total_count(),\n"
+            "    'logger_summary_count': logger.get_summary()[0].count,\n"
+            "    'sandbox_stdout': sandbox_result.stdout(),\n"
+            "    'transform_commands': transformed.metadata['commands'],\n"
+            "    'exec_commands': exec_result.metadata['commands'],\n"
+            "}\n"
+            "print(json.dumps(payload))\n"
+        ),
+    )
+    assert_packaged_runtime_available(completed, label=label)
+    payload = json.loads(completed.stdout)
+    assert payload["ast_type"] == "Script"
+    assert payload["serialized"] == "echo hello | cat"
+    assert payload["command_names_has_echo"] is True
+    assert payload["pipeline_commands"] == ["cat", "echo", "exit", "tee"]
+    assert payload["pipeline_has_tee"] is True
+    assert payload["logger_total"] == 1
+    assert payload["logger_summary_count"] == 1
+    assert payload["sandbox_stdout"] == "note\n"
+    assert payload["transform_commands"] == ["cat", "echo"]
+    assert payload["exec_commands"] == ["cat", "echo"]
+
+
 @pytest.fixture(scope="module")
 def installed_wheel() -> InstalledDistribution:
     root = Path(tempfile.mkdtemp(prefix="just-py-bash-installed-wheel-"))
@@ -391,6 +456,13 @@ def test_installed_wheel_supports_option_hooks(installed_wheel: InstalledDistrib
     assert_installed_option_hooks_work(installed_wheel, label="installed wheel option hooks test")
 
 
+def test_installed_wheel_supports_broader_export_surfaces(installed_wheel: InstalledDistribution) -> None:
+    assert_installed_broader_export_surfaces_work(
+        installed_wheel,
+        label="installed wheel broader export test",
+    )
+
+
 def test_installed_wheel_supports_optional_python_and_javascript_runtimes(
     installed_wheel: InstalledDistribution,
 ) -> None:
@@ -437,6 +509,13 @@ def test_installed_sdist_supports_session_fs_api_and_richer_initial_files(
 
 def test_installed_sdist_supports_option_hooks(installed_sdist: InstalledDistribution) -> None:
     assert_installed_option_hooks_work(installed_sdist, label="installed sdist option hooks test")
+
+
+def test_installed_sdist_supports_broader_export_surfaces(installed_sdist: InstalledDistribution) -> None:
+    assert_installed_broader_export_surfaces_work(
+        installed_sdist,
+        label="installed sdist broader export test",
+    )
 
 
 def test_installed_sdist_supports_optional_python_and_javascript_runtimes(

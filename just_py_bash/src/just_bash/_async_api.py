@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any, Self, cast
+from typing import Self, cast
 
 from ._async_bridge import AsyncNodeBridge
 from ._bridge_protocol import BridgeOperation
@@ -14,6 +14,7 @@ from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._option_hooks import BashLogger, DefenseInDepthConfig, FeatureCoverageWriter, FetchCallback, TraceCallback
 from ._options import BashOptions, ExecOptions
 from ._session_fs import AsyncSessionFs
+from ._transform import BashTransformResult, TransformPlugin
 from ._types import NetworkConfig, ProcessInfo
 
 
@@ -164,7 +165,7 @@ class AsyncBash:
     async def bridge_request(self, op: BridgeOperation, payload: Mapping[str, object]) -> object:
         async with self._lock():
             bridge = await self._ensure_bridge_open_locked()
-            return cast(object, await bridge.request(cast(Any, op), cast(Any, payload)))
+            return await bridge.request_raw(op, payload)
 
     async def exec(
         self,
@@ -203,6 +204,20 @@ class AsyncBash:
                 timeout=None if options.timeout is None else options.timeout + 5.0,
             )
         return ExecResult.from_wire(payload)
+
+    async def register_transform_plugin(self, plugin: TransformPlugin) -> None:
+        async with self._lock():
+            bridge = await self._ensure_bridge_open_locked()
+            await bridge.request_raw("register_transform_plugin", {"plugin": plugin.to_wire()})
+
+    async def transform(self, command_line: str) -> BashTransformResult:
+        async with self._lock():
+            bridge = await self._ensure_bridge_open_locked()
+            raw_payload = await bridge.request_raw("transform", {"script": command_line})
+        if not isinstance(raw_payload, Mapping):
+            raise TypeError(f"Expected a transform result mapping, got {type(raw_payload).__name__}")
+        payload = cast(Mapping[str, object], raw_payload)
+        return BashTransformResult.from_wire(payload)
 
     async def read_text(self, path: str) -> str:
         return await self.fs.read_text(path)

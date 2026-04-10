@@ -331,6 +331,76 @@ with Bash(javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapp
 
 See `examples/configuration_and_runtimes.py` for a runnable end-to-end example.
 
+## Broader Upstream Exports
+
+The wrapper now also exposes the main parser / transform / sandbox / security helper surfaces that map cleanly into Python.
+
+### Command registry helpers and parser helpers
+
+```python
+from just_bash import get_command_names, parse, serialize
+
+script = "echo hello | grep h"
+ast = parse(script)
+
+print("echo" in get_command_names())
+print(ast["type"])
+print(serialize(ast))
+```
+
+### Transform pipeline helpers
+
+```python
+from datetime import UTC, datetime
+
+from just_bash import Bash, BashTransformPipeline, CommandCollectorPlugin, TeePlugin
+
+pipeline = (
+    BashTransformPipeline()
+    .use(TeePlugin(output_dir="/tmp/logs", timestamp=datetime(2024, 1, 15, 10, 30, 45, 123000, tzinfo=UTC)))
+    .use(CommandCollectorPlugin())
+)
+result = pipeline.transform("echo hello | grep h")
+print(result.metadata)
+
+with Bash() as bash:
+    bash.register_transform_plugin(CommandCollectorPlugin())
+    transformed = bash.transform("echo hello | grep h")
+    exec_result = bash.exec("echo hello | grep h")
+    print(transformed.metadata)
+    print(exec_result.metadata)
+```
+
+### Sandbox helpers
+
+```python
+from just_bash import Sandbox, SandboxOptions
+
+with Sandbox.create(SandboxOptions(cwd="/app")) as sandbox:
+    sandbox.write_files({"/app/hello.txt": "hello from sandbox\n"})
+    command = sandbox.run_command("cat /app/hello.txt")
+    print(command.stdout(), end="")
+```
+
+Async code can use `AsyncSandbox` with the same high-level shape.
+
+### Security helpers
+
+```python
+from just_bash import SecurityViolation, SecurityViolationLogger
+
+logger = SecurityViolationLogger(include_stack_traces=False)
+logger.record(
+    SecurityViolation(
+        timestamp=1,
+        type="eval",
+        message="blocked eval",
+        path="globalThis.eval",
+    )
+)
+print(logger.get_summary())
+```
+
 ## Examples
 
 The repo includes a Python `examples/` directory that mirrors the spirit of the vendored upstream examples and README:
@@ -342,6 +412,10 @@ The repo includes a Python `examples/` directory that mirrors the spirit of the 
 | `examples/custom_commands_sync.py` | A Python port of the upstream custom-command showcase |
 | `examples/custom_commands_async.py` | Async custom commands with nested async exec |
 | `examples/configuration_and_runtimes.py` | Session config, per-exec overrides, Python, and JavaScript runtimes |
+| `examples/parser_and_command_registry.py` | Command-name helpers plus standalone `parse(...)` / `serialize(...)` |
+| `examples/transforms.py` | Standalone transform pipelines and session-integrated transform registration |
+| `examples/sandbox.py` | Upstream-style sandbox helpers, detached commands, and file IO |
+| `examples/security_helpers.py` | Security violation logging helpers |
 | `examples/network_access.py` | Allow-listed network access with `curl` |
 
 See [`examples/README.md`](examples/README.md) for run instructions.
@@ -388,9 +462,9 @@ If you provide only `js_entry=` or `JUST_BASH_JS_ENTRY`, the wrapper will try to
 
 ## Scope Compared to Upstream TypeScript API
 
-This wrapper intentionally focuses on the portable Python session API. It mirrors the upstream shell behavior, options, custom commands, optional capabilities, the init-time filesystem configuration model via `fs=` plus `InMemoryFs`, `OverlayFs`, `ReadWriteFs`, `MountableFs`, and `MountConfig`, and now a session-bound filesystem API via `bash.fs` / `async_bash.fs`.
+The wrapper now covers the main upstream session API, filesystem config and session-fs surfaces, option hooks, command-name helpers, standalone parser/serializer helpers, the built-in transform pipeline/plugin surfaces (`BashTransformPipeline`, `CommandCollectorPlugin`, `TeePlugin`), and upstream-style sandbox/security helper utilities that map cleanly into Python.
 
-What it still does **not** expose is the full low-level TypeScript filesystem surface or live Python filesystem adapter interfaces from the TypeScript package. The Python wrapper currently covers the session-facing filesystem methods (`exists`, `stat`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, plus the text/bytes helpers), but not the remaining lower-level pieces like `lstat`, `symlink`, `link`, `utimes`, or `readdirWithFileTypes`. If you need those full lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API with upstream-backed filesystem behavior, use `just-py-bash`.
+What it still does **not** expose is the full low-level TypeScript filesystem surface or live Python filesystem adapter interfaces from the TypeScript package. The Python wrapper currently covers the session-facing filesystem methods (`exists`, `stat`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, plus the text/bytes helpers), but not the remaining lower-level pieces like `lstat`, `symlink`, `link`, `utimes`, or `readdirWithFileTypes`. If you need those full lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API plus the portable parser / transform / sandbox / security helper surfaces described above, use `just-py-bash`.
 
 ## Contributing / Development
 
@@ -443,9 +517,9 @@ The repo's own workspace is already wired to use the local package during `uv sy
 The test suite treats upstream `just-bash` as the semantic oracle for current wrapper parity.
 
 - `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, dedicated filesystem-config parity coverage, and new session-fs parity coverage
-- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, richer initial files, session fs operations, and key execution limits using local fixtures rather than public-internet dependencies
-- `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, and installed wheel/sdist runtime behavior
-- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, example smoke coverage, and the current CLI surface
+- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, richer initial files, session fs operations, key execution limits, and the new command-registry / parser / transform helper surfaces using direct upstream comparisons
+- `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, and installed wheel/sdist runtime behavior, including smoke coverage for the broader export helpers
+- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, transform registration, sandbox helpers, security helpers, example smoke coverage, and the current CLI surface
 
 For day-to-day development, `make all` is the main confidence gate: format, lint, typecheck, and the full test suite.
 

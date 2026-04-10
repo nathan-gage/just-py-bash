@@ -12,9 +12,13 @@ let bash = null;
 let backendVersion = null;
 let packageJsonPath = null;
 let nextInvocationId = 1;
+let nextSandboxId = 1;
+let nextSandboxCommandId = 1;
 const pendingCustomCommands = new Map();
 const pendingLazyFiles = new Map();
 const pendingFetches = new Map();
+const sandboxes = new Map();
+const sandboxCommands = new Map();
 
 function respond(id, ok, payload) {
   const body = ok
@@ -432,6 +436,71 @@ function decodeExecOptions(options) {
   return decoded;
 }
 
+function decodeParseOptions(options) {
+  const decoded = {};
+  if (options?.maxHeredocSize !== undefined) {
+    decoded.maxHeredocSize = options.maxHeredocSize;
+  }
+  return decoded;
+}
+
+function decodeTransformPlugin(spec) {
+  if (!backendModule) {
+    throw new Error('Backend module is not loaded');
+  }
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+    throw new Error('Unsupported transform plugin payload');
+  }
+
+  switch (spec.kind) {
+    case 'command_collector':
+      return new backendModule.CommandCollectorPlugin();
+    case 'tee': {
+      const options = {
+        outputDir: spec.outputDir,
+      };
+      if (typeof spec.targetCommandPatternSource === 'string') {
+        options.targetCommandPattern = new RegExp(
+          spec.targetCommandPatternSource,
+          typeof spec.targetCommandPatternFlags === 'string'
+            ? spec.targetCommandPatternFlags
+            : '',
+        );
+      }
+      if (spec.timestampMs !== undefined) {
+        options.timestamp = new Date(spec.timestampMs);
+      }
+      return new backendModule.TeePlugin(options);
+    }
+    default:
+      throw new Error(`Unsupported transform plugin kind: ${String(spec.kind)}`);
+  }
+}
+
+function decodeTransformPlugins(specs) {
+  if (!Array.isArray(specs)) {
+    return [];
+  }
+  return specs.map((spec) => decodeTransformPlugin(spec));
+}
+
+function decodeSandboxOptions(options) {
+  const decoded = {};
+  if (options.cwd !== undefined) decoded.cwd = options.cwd;
+  if (options.env !== undefined) decoded.env = options.env;
+  if (options.timeoutMs !== undefined) decoded.timeoutMs = options.timeoutMs;
+  if (options.fs !== undefined) decoded.fs = decodeFs(options.fs);
+  if (options.overlayRoot !== undefined) decoded.overlayRoot = options.overlayRoot;
+  if (options.maxCallDepth !== undefined) decoded.maxCallDepth = options.maxCallDepth;
+  if (options.maxCommandCount !== undefined) decoded.maxCommandCount = options.maxCommandCount;
+  if (options.maxLoopIterations !== undefined) decoded.maxLoopIterations = options.maxLoopIterations;
+  if (options.network !== undefined) decoded.network = options.network;
+  if (options.defenseInDepth !== undefined) {
+    decoded.defenseInDepth = decodeDefenseInDepth(options.defenseInDepth);
+  }
+  return decoded;
+}
+
 function ensureInitialized() {
   if (!bash) {
     throw new Error('Worker is not initialized');
@@ -456,6 +525,105 @@ function normalizeFsStat(stat) {
           ? Number(stat.mtime.valueOf())
           : 0,
   };
+}
+
+function getSandbox(sandboxId) {
+  const sandbox = sandboxes.get(sandboxId);
+  if (!sandbox) {
+    throw new Error(`Unknown sandbox: ${String(sandboxId)}`);
+  }
+  return sandbox;
+}
+
+function storeSandboxCommand(command) {
+  const commandId = nextSandboxCommandId++;
+  sandboxCommands.set(commandId, command);
+  return commandId;
+}
+
+function getSandboxCommand(commandId) {
+  const command = sandboxCommands.get(commandId);
+  if (!command) {
+    throw new Error(`Unknown sandbox command: ${String(commandId)}`);
+  }
+  return command;
+}
+
+async function describeSandboxCommand(command, commandId, includeOutput = false) {
+  const payload = {
+    commandId,
+    cmdId: typeof command?.cmdId === 'string' ? command.cmdId : '',
+    cwd: typeof command?.cwd === 'string' ? command.cwd : '',
+    startedAtMs:
+      command?.startedAt instanceof Date ? command.startedAt.getTime() : Date.now(),
+    exitCode:
+      command?.exitCode === undefined || Number.isInteger(command?.exitCode)
+        ? command.exitCode ?? null
+        : null,
+  };
+
+  if (includeOutput) {
+    const finished = await command.wait();
+    payload.exitCode = Number.isInteger(finished?.exitCode)
+      ? finished.exitCode
+      : payload.exitCode;
+    payload.stdout = await command.stdout();
+    payload.stderr = await command.stderr();
+  }
+
+  return payload;
+}
+
+async function collectSandboxLogs(command) {
+  const messages = [];
+  for await (const message of command.logs()) {
+    messages.push({
+      type: message?.type === 'stderr' ? 'stderr' : 'stdout',
+      data: typeof message?.data === 'string' ? message.data : '',
+      timestampMs:
+        message?.timestamp instanceof Date ? message.timestamp.getTime() : Date.now(),
+    });
+  }
+  return messages;
+}
+
+async function handleSandboxRunCommand(message) {
+  const sandbox = getSandbox(message.sandboxId);
+  const detached = Boolean(message.detached);
+
+  let command;
+  if (Array.isArray(message.args)) {
+    if (message.cwd !== undefined || message.env !== undefined || detached || message.sudo) {
+      command = await sandbox.runCommand({
+        cmd: message.command,
+        args: message.args,
+        cwd: message.cwd,
+        env: message.env,
+        sudo: Boolean(message.sudo),
+        detached,
+      });
+    } else {
+      command = await sandbox.runCommand(message.command, message.args);
+    }
+  } else {
+    if (detached || message.sudo) {
+      command = await sandbox.runCommand({
+        cmd: message.commandLine,
+        cwd: message.cwd,
+        env: message.env,
+        sudo: Boolean(message.sudo),
+        detached,
+      });
+    } else {
+      command = await sandbox.runCommand(message.commandLine, {
+        cwd: message.cwd,
+        env: message.env,
+      });
+    }
+  }
+
+  const commandId = storeSandboxCommand(command);
+  return await describeSandboxCommand(command, commandId, !detached);
 }
 
 async function runExec(executor, script, options) {
@@ -596,6 +764,138 @@ async function handleMessage(message) {
         message.script,
         decodeExecOptions(message.options ?? {}),
       );
+    }
+
+    case 'get_command_names': {
+      ensureInitialized();
+      switch (message.kind) {
+        case 'network':
+          return backendModule.getNetworkCommandNames();
+        case 'python':
+          return backendModule.getPythonCommandNames();
+        case 'javascript':
+          return backendModule.getJavaScriptCommandNames();
+        case 'all':
+        default:
+          return backendModule.getCommandNames();
+      }
+    }
+
+    case 'parse': {
+      ensureInitialized();
+      return backendModule.parse(message.script, decodeParseOptions(message.options ?? {}));
+    }
+
+    case 'serialize': {
+      ensureInitialized();
+      return backendModule.serialize(message.ast);
+    }
+
+    case 'transform_script': {
+      ensureInitialized();
+      const pipeline = new backendModule.BashTransformPipeline();
+      for (const plugin of decodeTransformPlugins(message.plugins)) {
+        pipeline.use(plugin);
+      }
+      return pipeline.transform(message.script);
+    }
+
+    case 'register_transform_plugin': {
+      ensureInitialized();
+      bash.registerTransformPlugin(decodeTransformPlugin(message.plugin));
+      return null;
+    }
+
+    case 'transform': {
+      ensureInitialized();
+      return bash.transform(message.script);
+    }
+
+    case 'sandbox_create': {
+      ensureInitialized();
+      const sandbox = await backendModule.Sandbox.create(
+        decodeSandboxOptions(message.options ?? {}),
+      );
+      const sandboxId = nextSandboxId++;
+      sandboxes.set(sandboxId, sandbox);
+      return { sandboxId, domain: sandbox.domain ?? null };
+    }
+
+    case 'sandbox_run_command': {
+      ensureInitialized();
+      return await handleSandboxRunCommand(message);
+    }
+
+    case 'sandbox_write_files': {
+      ensureInitialized();
+      const sandbox = getSandbox(message.sandboxId);
+      await sandbox.writeFiles(message.files ?? {});
+      return null;
+    }
+
+    case 'sandbox_read_file': {
+      ensureInitialized();
+      const sandbox = getSandbox(message.sandboxId);
+      return await sandbox.readFile(message.path, message.encoding);
+    }
+
+    case 'sandbox_mkdir': {
+      ensureInitialized();
+      const sandbox = getSandbox(message.sandboxId);
+      await sandbox.mkDir(message.path, { recursive: Boolean(message.recursive) });
+      return null;
+    }
+
+    case 'sandbox_extend_timeout': {
+      ensureInitialized();
+      const sandbox = getSandbox(message.sandboxId);
+      await sandbox.extendTimeout(message.timeoutMs);
+      return null;
+    }
+
+    case 'sandbox_stop': {
+      ensureInitialized();
+      const sandbox = getSandbox(message.sandboxId);
+      await sandbox.stop();
+      sandboxes.delete(message.sandboxId);
+      return null;
+    }
+
+    case 'sandbox_command_wait': {
+      ensureInitialized();
+      const command = getSandboxCommand(message.commandId);
+      return await describeSandboxCommand(command, message.commandId, true);
+    }
+
+    case 'sandbox_command_stdout': {
+      ensureInitialized();
+      const command = getSandboxCommand(message.commandId);
+      return await command.stdout();
+    }
+
+    case 'sandbox_command_stderr': {
+      ensureInitialized();
+      const command = getSandboxCommand(message.commandId);
+      return await command.stderr();
+    }
+
+    case 'sandbox_command_output': {
+      ensureInitialized();
+      const command = getSandboxCommand(message.commandId);
+      return await command.output();
+    }
+
+    case 'sandbox_command_logs': {
+      ensureInitialized();
+      const command = getSandboxCommand(message.commandId);
+      return await collectSandboxLogs(command);
+    }
+
+    case 'sandbox_command_kill': {
+      ensureInitialized();
+      const command = getSandboxCommand(message.commandId);
+      await command.kill();
+      return null;
     }
 
     case 'custom_command_exec': {

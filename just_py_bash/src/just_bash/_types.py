@@ -137,6 +137,25 @@ class SecurityViolationWire(TypedDict, total=False):
     executionId: str
 
 
+class ParseOptionsWire(TypedDict, total=False):
+    maxHeredocSize: int
+
+
+class CommandCollectorPluginWire(TypedDict):
+    kind: Literal["command_collector"]
+
+
+class TeePluginWire(TypedDict, total=False):
+    kind: Literal["tee"]
+    outputDir: str
+    targetCommandPatternSource: str
+    targetCommandPatternFlags: str
+    timestampMs: int
+
+
+TransformPluginWire: TypeAlias = CommandCollectorPluginWire | TeePluginWire
+
+
 class InMemoryFsWire(TypedDict, total=False):
     kind: Literal["in_memory"]
     files: Mapping[str, InitialFileValueWire]
@@ -260,6 +279,115 @@ class ChmodRequestPayload(TypedDict):
     mode: int
 
 
+class ParseRequestPayload(TypedDict, total=False):
+    script: str
+    options: ParseOptionsWire
+
+
+class SerializeRequestPayload(TypedDict):
+    ast: object
+
+
+class TransformRequestPayload(TypedDict):
+    script: str
+    plugins: Sequence[TransformPluginWire]
+
+
+class GetCommandNamesRequestPayload(TypedDict):
+    kind: Literal["all", "network", "python", "javascript"]
+
+
+class RegisterTransformPluginRequestPayload(TypedDict):
+    plugin: TransformPluginWire
+
+
+class SandboxOptionsWire(TypedDict, total=False):
+    cwd: str
+    env: Mapping[str, str]
+    timeoutMs: int
+    fs: FsConfigWire
+    overlayRoot: str
+    maxCallDepth: int
+    maxCommandCount: int
+    maxLoopIterations: int
+    network: NetworkConfig
+    defenseInDepth: bool | DefenseInDepthConfigWire
+
+
+class SandboxCreateRequestPayload(TypedDict):
+    options: SandboxOptionsWire
+
+
+class SandboxCreateResponse(TypedDict, total=False):
+    sandboxId: int
+    domain: str | None
+
+
+class SandboxWriteFileWire(TypedDict, total=False):
+    content: str
+    encoding: Literal["utf-8", "base64"]
+
+
+SandboxWriteFileValueWire: TypeAlias = str | SandboxWriteFileWire
+
+
+class SandboxWriteFilesRequestPayload(TypedDict):
+    sandboxId: int
+    files: Mapping[str, SandboxWriteFileValueWire]
+
+
+class SandboxReadFileRequestPayload(TypedDict, total=False):
+    sandboxId: int
+    path: str
+    encoding: Literal["utf-8", "base64"]
+
+
+class SandboxMkdirRequestPayload(TypedDict, total=False):
+    sandboxId: int
+    path: str
+    recursive: bool
+
+
+class SandboxStopRequestPayload(TypedDict):
+    sandboxId: int
+
+
+class SandboxExtendTimeoutRequestPayload(TypedDict):
+    sandboxId: int
+    timeoutMs: int
+
+
+class SandboxRunCommandRequestPayload(TypedDict, total=False):
+    sandboxId: int
+    commandLine: str
+    command: str
+    args: Sequence[str]
+    cwd: str
+    env: Mapping[str, str]
+    sudo: bool
+    detached: bool
+
+
+class SandboxCommandRequestPayload(TypedDict):
+    commandId: int
+
+
+class SandboxCommandDescriptorWire(TypedDict, total=False):
+    commandId: int
+    cmdId: str
+    cwd: str
+    startedAtMs: int
+    exitCode: int | None
+    stdout: str
+    stderr: str
+
+
+class SandboxOutputMessageWire(TypedDict):
+    type: Literal["stdout", "stderr"]
+    data: str
+    timestampMs: int
+
+
 class WriteTextRequestPayload(TypedDict):
     path: str
     content: str
@@ -356,6 +484,12 @@ class FsStatWire(TypedDict):
     mode: int
     size: int
     mtimeMs: int
+
+
+class BashTransformResultWire(TypedDict):
+    script: str
+    ast: object
+    metadata: object
 
 
 class WorkerSuccessResponse(TypedDict):
