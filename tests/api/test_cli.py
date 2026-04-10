@@ -187,6 +187,10 @@ def normalize_terminal_output(raw: bytes) -> str:
     return text
 
 
+def normalize_path_separators(text: str) -> str:
+    return text.replace("\\", "/")
+
+
 def _has_shell_prompt(text: str) -> bool:
     return text.endswith("$ ")
 
@@ -451,11 +455,13 @@ def test_cli_propagates_unknown_option_error_to_upstream() -> None:
 def test_cli_reports_missing_cli_assets_cleanly(tmp_path: Path) -> None:
     completed = run_source_cli("--help", env_overrides=backend_env_missing_cli_assets(tmp_path))
 
+    normalized_stderr = normalize_path_separators(completed.stderr)
+
     assert completed.returncode == 1
     assert completed.stdout == ""
     assert "Traceback" not in completed.stderr
     assert "Could not find the upstream just-bash CLI asset required for delegation" in completed.stderr
-    assert "dist/bin/just-bash.js" in completed.stderr
+    assert "dist/bin/just-bash.js" in normalized_stderr
 
 
 def test_cli_reports_invalid_node_command_cleanly() -> None:
@@ -577,8 +583,10 @@ def test_shell_cli_interactive_eof_matches_upstream(tmp_path: Path) -> None:
 def test_shell_cli_reports_missing_cli_assets_cleanly(tmp_path: Path) -> None:
     completed = run_source_shell_cli("--help", env_overrides=backend_env_missing_cli_assets(tmp_path))
 
+    normalized_stderr = normalize_path_separators(completed.stderr)
+
     assert completed.returncode == 1
     assert completed.stdout == ""
     assert "Traceback" not in completed.stderr
     assert "Could not find the upstream just-bash CLI asset required for delegation" in completed.stderr
-    assert "dist/bin/shell/shell.js" in completed.stderr
+    assert "dist/bin/shell/shell.js" in normalized_stderr
