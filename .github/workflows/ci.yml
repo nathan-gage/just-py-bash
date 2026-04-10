@@ -45,7 +45,16 @@ jobs:
           cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
 
       - name: Build vendored backend and packaged runtime
-        run: make prepare-test-backend
+        shell: bash
+        env:
+          npm_config_script_shell: bash
+        run: |
+          cd vendor/just-bash
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+          pnpm build
+          cd ../..
+          bash just_py_bash/tools/build_packaged_runtime.sh
 
       - name: Record backend artifact metadata
         shell: bash

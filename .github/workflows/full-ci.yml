@@ -172,7 +172,16 @@ jobs:
           cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
 
       - name: Build vendored backend and packaged runtime
-        run: make prepare-test-backend
+        shell: bash
+        env:
+          npm_config_script_shell: bash
+        run: |
+          cd vendor/just-bash
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+          pnpm build
+          cd ../..
+          bash just_py_bash/tools/build_packaged_runtime.sh
 
       - name: Record backend artifact metadata
         shell: bash
@@ -537,11 +546,6 @@ jobs:
               handle.write(f'JUST_BASH_TEST_PACKAGED_PACKAGE_JSON={package_json}\n')
 
       - name: Run non-packaging test suite
-        if: matrix.os != 'windows-latest'
-        run: uv run --no-sync pytest -q -m "not packaging"
-
-      - name: Run non-packaging test suite (Windows, parallelized)
-        if: matrix.os == 'windows-latest'
         shell: bash
         run: COLUMNS=150 uv run --no-sync pytest -q -n auto --dist=loadgroup --durations=10 -m "not packaging"
 
