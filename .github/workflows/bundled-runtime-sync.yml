@@ -54,6 +54,7 @@ jobs:
         run: |
           gh label create automation --color 0E8A16 --description "Automated pull request" --force
           gh label create bundled-runtime --color 5319E7 --description "Updates the bundled Node runtime package" --force
+          gh label create dependencies --color 0366D6 --description "Dependency or upstream version update" --force
           gh label create release-candidate --color B60205 --description "Run full CI and auto-tag eligible release PRs when merged" --force
 
       - name: Sync bundled runtime version
@@ -86,4 +87,5 @@ jobs:
           labels: |-
             automation
             bundled-runtime
+            dependencies
             release-candidate

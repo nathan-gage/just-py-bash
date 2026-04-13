@@ -97,6 +97,7 @@ jobs:
         run: |
           gh label create automation --color 0E8A16 --description "Automated pull request" --force
           gh label create upstream-sync --color 1D76DB --description "Updates the vendored just-bash checkout" --force
+          gh label create dependencies --color 0366D6 --description "Dependency or upstream version update" --force
           gh label create release-candidate --color B60205 --description "Run full CI and auto-tag eligible release PRs when merged" --force
 
       - name: Apply planned submodule update without building upstream code
@@ -145,6 +146,7 @@ jobs:
           labels: |
             automation
             upstream-sync
+            dependencies
             release-candidate
 
       - name: Create non-release pull request
@@ -179,3 +181,4 @@ jobs:
           labels: |-
             automation
             upstream-sync
+            dependencies
