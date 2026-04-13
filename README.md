@@ -647,14 +647,7 @@ The repo's own workspace is already wired to use the local package during `uv sy
 
 ### Versioning and release flow
 
-- When upstream `just-bash` releases `X.Y.Z`, `just-py-bash` aims to release the matching version `X.Y.Z`.
-- If the Python wrapper needs a follow-up release without a new upstream `just-bash` version, use a PEP 440 post-release such as `X.Y.Z.post1`.
-- `just-py-bash` now uses dynamic versioning from Git tags, like `markserv`. Manual releases are tag-driven: create and push `vX.Y.Z` or `vX.Y.Z.postN` from `main`, and the release workflow will build, publish to TestPyPI, publish to PyPI, and then create the GitHub release.
-- Automated upstream-sync PRs labeled `release-candidate` are also tag-driven, but the tag is created automatically only after the PR is merged to `main`. That keeps PyPI publishing tied to tags that are actually on `main`.
-- The upstream sync workflow now pins `vendor/just-bash` to the commit where the target upstream version was introduced, instead of blindly taking a later `origin/main` commit that still reports the same version.
-- `just-bash-bundled-runtime` is versioned independently from `just-py-bash` and also uses dynamic versioning from Git tags. Its release tags are `runtime/vX.Y.Z` (or `runtime/vX.Y.Z.postN`), while the tracked bundled Node version lives separately in `[tool.just-bash-bundled-runtime]`. Its release workflow also goes through TestPyPI before PyPI.
-- Bundled-runtime sync PRs labeled `release-candidate` are auto-tagged on merge to `main`, which triggers the same tag-driven publish workflow for that package.
-- PRs intended to become releases should be labeled `release-candidate`. That label triggers the expensive Full CI workflow, including packaging and compatibility coverage.
+See [VERSIONING.md](VERSIONING.md) for the package version semantics, tag formats, runtime-version policy, and tag-driven release flow.
 
 ## Conformance Testing
 
