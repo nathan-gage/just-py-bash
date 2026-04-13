@@ -160,13 +160,41 @@ def validate_tag(target: ReleaseTarget, tag: str) -> ParsedTag:
 def validate_artifacts(target: ReleaseTarget, version: str, dist_dir: Path) -> None:
     names = [path.name for path in dist_dir.glob("*") if path.is_file()]
     expected_wheel_fragment = f"{target.artifact_stem}-{version}-"
-    if not any(name.endswith(".whl") and expected_wheel_fragment in name for name in names):
+    wheel_names = [name for name in names if name.endswith(".whl") and expected_wheel_fragment in name]
+    if not wheel_names:
         raise RuntimeError(f"Built artifacts {names!r} do not contain a wheel for version {version!r}")
+
+    if target == BUNDLED_RUNTIME:
+        validate_bundled_runtime_wheels(wheel_names)
 
     if target.expects_sdist:
         expected_sdist = f"{target.artifact_stem}-{version}.tar.gz"
         if expected_sdist not in names:
             raise RuntimeError(f"Built artifacts {names!r} do not contain sdist {expected_sdist!r}")
+
+
+def validate_bundled_runtime_wheels(wheel_names: list[str]) -> None:
+    for name in wheel_names:
+        platform_tag = wheel_platform_tag(name)
+        if platform_tag == "any":
+            raise RuntimeError(f"Bundled runtime wheel {name!r} must be platform-specific")
+        if platform_tag.startswith("linux_"):
+            raise RuntimeError(
+                f"Bundled runtime wheel {name!r} uses unsupported plain Linux platform tag {platform_tag!r}; "
+                "use a manylinux or musllinux tag instead"
+            )
+
+
+def wheel_platform_tag(wheel_name: str) -> str:
+    if not wheel_name.endswith(".whl"):
+        raise RuntimeError(f"Expected wheel filename, got {wheel_name!r}")
+
+    stem = wheel_name[:-4]
+    parts = stem.split("-")
+    if len(parts) < 5:
+        raise RuntimeError(f"Wheel filename {wheel_name!r} does not follow the expected wheel naming convention")
+
+    return parts[-1]
 
 
 def write_output(name: str, value: str) -> None:

@@ -196,6 +196,7 @@ dev = [
     { name = "pydantic" },
     { name = "pytest" },
     { name = "pytest-xdist" },
+    { name = "setuptools", marker = "sys_platform == 'win32'" },
 ]
 lint = [
     { name = "mypy" },
@@ -214,6 +215,7 @@ dev = [
     { name = "pydantic", specifier = ">=2.10" },
     { name = "pytest", specifier = ">=9.0.0" },
     { name = "pytest-xdist", specifier = ">=3.6.1" },
+    { name = "setuptools", marker = "sys_platform == 'win32'", specifier = ">=82.0.1" },
 ]
 lint = [
     { name = "mypy", specifier = ">=1.20.1" },
