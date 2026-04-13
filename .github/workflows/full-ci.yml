@@ -670,6 +670,11 @@ jobs:
           echo "runtime-compat=$RUNTIME_COMPAT_RESULT"
           echo "bundled-runtime-packaging=$BUNDLED_RUNTIME_PACKAGING_RESULT"
 
+          if [[ "$DETECT_RESULT" == "cancelled" ]]; then
+            echo "Full CI run was cancelled or superseded by a newer run."
+            exit 0
+          fi
+
           [[ "$DETECT_RESULT" == "success" ]]
 
           if [[ "$RUN_FULL" != "true" ]]; then

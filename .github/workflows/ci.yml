@@ -213,6 +213,11 @@ jobs:
           echo "checks=$CHECKS_RESULT"
           echo "tests=$TESTS_RESULT"
 
+          if [[ "$BACKEND_RESULT" == "cancelled" || "$CHECKS_RESULT" == "cancelled" || "$TESTS_RESULT" == "cancelled" ]]; then
+            echo "CI run was cancelled or superseded by a newer run."
+            exit 0
+          fi
+
           [[ "$BACKEND_RESULT" == "success" ]]
           [[ "$CHECKS_RESULT" == "success" ]]
           [[ "$TESTS_RESULT" == "success" ]]
