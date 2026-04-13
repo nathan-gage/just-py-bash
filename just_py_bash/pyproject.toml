@@ -5,7 +5,7 @@ description = "A Python wrapper around the just-bash virtual shell"
 readme = "README.md"
 authors = [{ name = "Nathan Gage", email = "nathan@sweetspot.so" }]
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.10"]
+dependencies = ["pydantic>=2.13.0"]
 
 [project.optional-dependencies]
 node = ["just-bash-bundled-runtime>=22,<23"]
