@@ -45,5 +45,16 @@ def test_validate_artifacts_accepts_main_package_filenames(tmp_path: Path) -> No
 def test_validate_artifacts_accepts_bundled_runtime_wheel_filename(tmp_path: Path) -> None:
     version = "22.22.2"
     (tmp_path / f"just_bash_bundled_runtime-{version}-py3-none-macosx_11_0_arm64.whl").write_text("", encoding="utf-8")
+    (tmp_path / f"just_bash_bundled_runtime-{version}-py3-none-manylinux_2_28_x86_64.whl").write_text(
+        "", encoding="utf-8"
+    )
 
     validate_artifacts(BUNDLED_RUNTIME, version, tmp_path)
+
+
+def test_validate_artifacts_rejects_plain_linux_runtime_wheel_filename(tmp_path: Path) -> None:
+    version = "22.22.2"
+    (tmp_path / f"just_bash_bundled_runtime-{version}-py3-none-linux_x86_64.whl").write_text("", encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="unsupported plain Linux platform tag"):
+        validate_artifacts(BUNDLED_RUNTIME, version, tmp_path)

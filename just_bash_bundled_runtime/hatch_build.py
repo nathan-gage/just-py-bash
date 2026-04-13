@@ -27,6 +27,7 @@ _WINDOWS_ARCH_TO_WHEEL_TAG = {
 }
 _MACOS_BUILD_VERSION = re.compile(r"minos (\d+)\.(\d+)(?:\.\d+)?")
 _MACOS_MIN_VERSION = re.compile(r"version (\d+)\.(\d+)(?:\.\d+)?")
+_GLIBC_VERSION = re.compile(r"Name:\s+GLIBC_(\d+)\.(\d+)\b")
 
 
 class RuntimeMetadata:
@@ -113,7 +114,8 @@ def read_metadata_field(payload: dict[object, object], key: str, path: Path) -> 
 def runtime_platform_tag(runtime_root: Path, metadata: RuntimeMetadata) -> str:
     platform_name, arch = metadata.platform_parts
     if platform_name == "linux":
-        return f"linux_{linux_arch_tag(arch)}"
+        major, minor = required_glibc_version(runtime_root)
+        return f"manylinux_{major}_{minor}_{linux_arch_tag(arch)}"
     if platform_name == "win":
         return f"win_{windows_arch_tag(arch)}"
     if platform_name == "darwin":
@@ -133,6 +135,52 @@ def node_executable(runtime_root: Path, metadata: RuntimeMetadata) -> Path:
     if not executable.exists():
         raise RuntimeError(f"Bundled Node executable is missing from {runtime_root}")
     return executable
+
+
+def required_glibc_version(runtime_root: Path) -> tuple[int, int]:
+    versions: list[tuple[int, int]] = []
+    for path in elf_binaries(runtime_root):
+        versions.extend(glibc_versions_for_binary(path))
+
+    if not versions:
+        raise RuntimeError(f"Could not determine GLIBC requirement from bundled runtime payload under {runtime_root}")
+
+    return max(versions)
+
+
+def elf_binaries(runtime_root: Path) -> list[Path]:
+    result: list[Path] = []
+    for path in runtime_root.rglob("*"):
+        if not path.is_file():
+            continue
+        with path.open("rb") as handle:
+            if handle.read(4) == b"\x7fELF":
+                result.append(path)
+    return result
+
+
+def glibc_versions_for_binary(path: Path) -> list[tuple[int, int]]:
+    try:
+        completed = subprocess.run(
+            ["readelf", "--version-info", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as exc:  # pragma: no cover - depends on host image
+        raise RuntimeError("Could not inspect bundled Linux binaries because `readelf` is not available") from exc
+
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "Could not inspect bundled Linux binary with `readelf --version-info`. "
+            f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}",
+        )
+
+    return parse_glibc_versions(completed.stdout)
+
+
+def parse_glibc_versions(payload: str) -> list[tuple[int, int]]:
+    return [(int(major), int(minor)) for major, minor in _GLIBC_VERSION.findall(payload)]
 
 
 def linux_arch_tag(arch: str) -> str:
