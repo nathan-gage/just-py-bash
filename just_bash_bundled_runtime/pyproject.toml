@@ -2,16 +2,35 @@
 name = "just-bash-bundled-runtime"
 dynamic = ["version"]
 description = "First-party bundled Node.js runtime provider for just-py-bash"
-readme = "README.md"
-authors = [{ name = "Nathan Gage", email = "nathan@sweetspot.so" }]
+readme = { file = "README.md", content-type = "text/markdown" }
+authors = [{ name = "Nathan Gage", email = "contact@nathangage.co" }]
+license = "MIT"
 requires-python = ">=3.11"
+keywords = ["bundled-runtime", "just-py-bash", "nodejs", "runtime", "shell"]
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: POSIX :: Linux",
   "Operating System :: MacOS",
   "Operating System :: Microsoft :: Windows",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/nathan-gage/just-py-bash/tree/main/just_bash_bundled_runtime"
+Source = "https://github.com/nathan-gage/just-py-bash/tree/main/just_bash_bundled_runtime"
+Documentation = "https://github.com/nathan-gage/just-py-bash/blob/main/just_bash_bundled_runtime/README.md"
+Issues = "https://github.com/nathan-gage/just-py-bash/issues"
+Changelog = "https://github.com/nathan-gage/just-py-bash/releases"
 
 [build-system]
 requires = ["hatchling>=1.29.0", "uv-dynamic-versioning>=0.7.0"]

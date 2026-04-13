@@ -5,17 +5,21 @@
 [![CI](https://github.com/nathan-gage/just-py-bash/actions/workflows/ci.yml/badge.svg)](https://github.com/nathan-gage/just-py-bash/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-api%20%2B%20parity%20%2B%20packaging-blue.svg)](#testing-and-coverage)
 
-`just-py-bash` gives Python the same long-lived virtual shell that [just-bash](https://github.com/vercel-labs/just-bash) exposes in TypeScript.
+Python wrapper for [just-bash](https://github.com/vercel-labs/just-bash), a virtual bash environment with an in-memory filesystem.
 
-Use it when you want shell-like scripting from Python without spinning up a brand-new subprocess workflow for every operation. Each session keeps a shared virtual filesystem, every `exec()` call follows upstream `just-bash` semantics, and results come back as structured Python objects.
+[just-bash](https://github.com/vercel-labs/just-bash) is a TypeScript implementation of a bash interpreter — it runs bash scripts entirely in-process with a virtual filesystem, no real shell or OS-level sandbox required. It supports 80+ standard Unix commands (`grep`, `sed`, `awk`, `jq`, `sqlite3`, etc.), pipes, redirections, variables, loops, functions, and optional `curl`, Python, and JavaScript runtimes. It was designed for AI agents that need a safe, deterministic shell environment.
 
-## Why just-py-bash?
+`just-py-bash` brings that same environment to Python. Each session spawns a Node.js worker running a real `just-bash` instance, and the Python API mirrors `just-bash`'s TypeScript API — you get the same command set, the same filesystem semantics, and the same isolation guarantees, with results returned as structured Python objects.
 
-- `Bash` for synchronous code and `AsyncBash` for native `asyncio`
-- shared virtual filesystem across calls, with isolated shell state per `exec()`
-- structured `ExecResult` results instead of raw `subprocess` plumbing
-- custom Python commands, optional `python` / `js-exec`, and allow-listed network access
-- thin CLI launchers plus an optional first-party bundled Node.js runtime
+## Why use this?
+
+- Run bash scripts from Python without a real shell, real filesystem, or subprocess plumbing
+- Shared virtual filesystem across `exec()` calls, with isolated shell state (env, cwd, functions) per call
+- `Bash` for synchronous code, `AsyncBash` for native `asyncio`
+- Structured `ExecResult` objects instead of raw stdout/stderr byte streams
+- Custom Python commands that participate in pipes, redirections, and the full shell
+- Optional `python`, `js-exec`, and allow-listed `curl` support
+- Thin CLI launchers plus an optional first-party bundled Node.js runtime
 
 ## Install
 
@@ -85,6 +89,15 @@ The repo is tested against upstream `just-bash` semantics, not just a handful of
 - `tests/contracts/` — cover packaging, runtime, and distribution behavior
 - `tests/api/` — cover the public Python API surface
 
+### Conformance testing
+
+The test suite treats upstream `just-bash` as the semantic oracle for current wrapper parity.
+
+- `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, dedicated filesystem-config parity coverage, and session-fs parity coverage
+- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, richer initial files, session fs operations, key execution limits, and command-registry / parser / transform helper surfaces using direct upstream comparisons
+- `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, installed wheel/sdist runtime behavior, broader export helpers, and delegated CLI entrypoints
+- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, transform registration, sandbox helpers, security helpers, example smoke coverage, and delegated CLI launcher behavior
+
 ## Development
 
 ```bash
@@ -99,5 +112,30 @@ Common commands:
 | Install dev tooling and build the packaged runtime | `make install` |
 | Run the standard local checks | `make all` |
 | Run the full CI-like suite with coverage | `make all-ci` |
+| Run the fast test suite (no packaging tests) | `make test-non-packaging` |
 | Build the main package | `make build-package` |
 | Build the bundled runtime wheel | `make build-bundled-runtime` |
+| Rebuild the packaged runtime payload | `make build-packaged-runtime` |
+| Remove generated build artifacts | `make clean` |
+
+Distribution builds materialize the packaged `src/just_bash/_vendor/just-bash` runtime during wheel/sdist creation, so that generated payload does not need to live in git.
+
+### Using the local bundled runtime package during development
+
+Most users should install the published extra:
+
+```bash
+uv add 'just-py-bash[node]'
+```
+
+If you are developing both packages together and want to test against the local companion package instead of the published one, install it from this repo:
+
+```bash
+uv add ./just_bash_bundled_runtime
+```
+
+The repo's own workspace is already wired to use the local package during `uv sync`.
+
+### Versioning and release flow
+
+See [VERSIONING.md](VERSIONING.md) for the package version semantics, tag formats, runtime-version policy, and tag-driven release flow.

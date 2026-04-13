@@ -612,56 +612,7 @@ The wrapper now covers the main upstream session API, filesystem config and sess
 
 What it still does **not** expose is the full low-level TypeScript filesystem surface or live Python filesystem adapter interfaces from the TypeScript package. The Python wrapper currently covers the session-facing filesystem methods (`exists`, `stat`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, plus the text/bytes helpers), but not the remaining lower-level pieces like `lstat`, `symlink`, `link`, `utimes`, or `readdirWithFileTypes`. If you need those full lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API plus the portable parser / transform / sandbox / security helper surfaces described above, use `just-py-bash`.
 
-## Contributing / Development
+## Contributing
 
-For development in this repo, use the `Makefile` helpers instead of running the bootstrap steps by hand:
-
-```bash
-make install
-make test
-```
-
-Common recipes:
-
-- `make install` — install Python dependencies, bootstrap `vendor/just-bash`, and prepare the packaged runtime payload used by the Python wrapper
-- `make all` — local developer loop: format, lint, typecheck, and run the full test suite
-- `make all-ci` — release-candidate / packaging checks: format verification, lint, typecheck, and coverage tests
-- `make test-non-packaging` — run the fast test suite used by the cheap CI workflow
-- `make build-packaged-runtime` — rebuild the packaged runtime payload under `src/just_bash/_vendor/just-bash`
-- `make build-package` — build the main `just-py-bash` wheel and sdist
-- `make build-bundled-runtime` — build the companion `just-bash-bundled-runtime` wheel
-- `make clean` — remove generated build artifacts
-
-Distribution builds materialize the packaged `src/just_bash/_vendor/just-bash` runtime during wheel/sdist creation, so that generated payload does not need to live in git.
-
-### Using the local bundled runtime package during development
-
-Most users should install the published extra:
-
-```bash
-uv add 'just-py-bash[node]'
-```
-
-If you are developing both packages together and want to test against the local companion package instead of the published one, install it from this repo:
-
-```bash
-uv add ./just_bash_bundled_runtime
-```
-
-The repo's own workspace is already wired to use the local package during `uv sync`.
-
-### Versioning and release flow
-
-See [VERSIONING.md](https://github.com/nathan-gage/just-py-bash/blob/main/VERSIONING.md) for the package version semantics, tag formats, runtime-version policy, and tag-driven release flow.
-
-## Conformance Testing
-
-The test suite treats upstream `just-bash` as the semantic oracle for current wrapper parity.
-
-- `tests/parity/` compares the Python wrapper against a direct Node reference harness for both sync and async sessions, with curated scenarios, generated transcripts, dedicated filesystem-config parity coverage, and new session-fs parity coverage
-- `tests/parity/` also includes capability parity checks for shipped features like `network`, `process_info`, filesystem configs, richer initial files, session fs operations, key execution limits, and the new command-registry / parser / transform helper surfaces using direct upstream comparisons
-- `tests/contracts/` covers Python-specific guarantees such as custom commands, backend override knobs, bridge failure paths, packaging, installed wheel/sdist runtime behavior, broader export helpers, and delegated CLI entrypoints
-- `tests/api/` covers the public API contract, including session lifecycle helpers, `from_options(...)`, transform registration, sandbox helpers, security helpers, example smoke coverage, and delegated CLI launcher behavior
-
-For day-to-day development, `make all` is the main confidence gate: format, lint, typecheck, and the full test suite.
+See the [repo README](https://github.com/nathan-gage/just-py-bash#development) for development setup, `Makefile` recipes, conformance testing, and release flow.
 

@@ -2,10 +2,43 @@
 name = "just-py-bash"
 dynamic = ["version"]
 description = "A Python wrapper around the just-bash virtual shell"
-readme = "README.md"
-authors = [{ name = "Nathan Gage", email = "nathan@sweetspot.so" }]
+readme = { file = "README.md", content-type = "text/markdown" }
+authors = [{ name = "Nathan Gage", email = "contact@nathangage.co" }]
+license = "MIT"
 requires-python = ">=3.11"
+keywords = [
+  "asyncio",
+  "bash",
+  "just-bash",
+  "sandbox",
+  "shell",
+  "subprocess",
+  "virtual-filesystem",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
 dependencies = ["pydantic>=2.13.0"]
+
+[project.urls]
+Homepage = "https://github.com/nathan-gage/just-py-bash"
+Source = "https://github.com/nathan-gage/just-py-bash"
+Documentation = "https://github.com/nathan-gage/just-py-bash/blob/main/just_py_bash/README.md"
+Issues = "https://github.com/nathan-gage/just-py-bash/issues"
+Changelog = "https://github.com/nathan-gage/just-py-bash/releases"
 
 [project.optional-dependencies]
 node = ["just-bash-bundled-runtime>=22,<23"]
