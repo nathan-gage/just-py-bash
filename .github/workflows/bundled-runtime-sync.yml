@@ -54,15 +54,12 @@ jobs:
         run: |
           gh label create automation --color 0E8A16 --description "Automated pull request" --force
           gh label create bundled-runtime --color 5319E7 --description "Updates the bundled Node runtime package" --force
-          gh label create release-candidate --color B60205 --description "Run full CI and consider this PR for a manual release" --force
+          gh label create dependencies --color 0366D6 --description "Dependency or upstream version update" --force
+          gh label create release-candidate --color B60205 --description "Run full CI and auto-tag eligible release PRs when merged" --force
 
       - name: Sync bundled runtime version
         id: sync
         run: uv run python just_bash_bundled_runtime/tools/sync_version.py
-
-      - name: Refresh uv.lock after version bump
-        if: steps.sync.outputs.changed == 'true'
-        run: uv lock
 
       - name: Create pull request
         if: steps.sync.outputs.changed == 'true'
@@ -79,13 +76,16 @@ jobs:
           body: |
             Automated bundled runtime update.
 
-            - previous version: `${{ steps.sync.outputs.from_version }}`
-            - new version: `${{ steps.sync.outputs.to_version }}`
+            - previous runtime version: `${{ steps.sync.outputs.from_version }}`
+            - new runtime version: `${{ steps.sync.outputs.to_version }}`
             - major line: `${{ steps.sync.outputs.target_major }}`
+            - release tag on merge: `${{ steps.sync.outputs.release_tag }}`
 
-            This PR updates `just_bash_bundled_runtime/pyproject.toml` to the latest Node.js LTS patch in the tracked major line.
-            It is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite before you decide whether to merge and publish it.
+            `just-bash-bundled-runtime` now uses dynamic versioning from Git tags. The tracked Node runtime version lives in `[tool.just-bash-bundled-runtime]`, separate from the package's dynamic release version source.
+            This PR updates the tracked Node.js LTS patch in that config.
+            It is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite. When it is merged to `main`, the auto-tag workflow will create `${{ steps.sync.outputs.release_tag }}` on the merge commit and the tag-driven release workflow will publish it.
           labels: |-
             automation
             bundled-runtime
+            dependencies
             release-candidate

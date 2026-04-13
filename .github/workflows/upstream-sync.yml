@@ -11,16 +11,34 @@ on:
     - cron: "17 5 * * *"
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: upstream-sync
   cancel-in-progress: false
 
 jobs:
-  sync:
+  plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+      from_sha: ${{ steps.sync.outputs.from_sha }}
+      to_sha: ${{ steps.sync.outputs.to_sha }}
+      from_sha_short: ${{ steps.sync.outputs.from_sha_short }}
+      to_sha_short: ${{ steps.sync.outputs.to_sha_short }}
+      from_version: ${{ steps.sync.outputs.from_version }}
+      to_version: ${{ steps.sync.outputs.to_version }}
+      version_changed: ${{ steps.sync.outputs.version_changed }}
+      release_candidate: ${{ steps.sync.outputs.release_candidate }}
+      target: ${{ steps.sync.outputs.target }}
+      requested_sha: ${{ steps.sync.outputs.requested_sha }}
+      requested_sha_short: ${{ steps.sync.outputs.requested_sha_short }}
+      requested_version: ${{ steps.sync.outputs.requested_version }}
+      pinned_to_version_commit: ${{ steps.sync.outputs.pinned_to_version_commit }}
+      selected_reason: ${{ steps.sync.outputs.selected_reason }}
+      release_tag: ${{ steps.sync.outputs.release_tag }}
 
     steps:
       - name: Validate workflow ref
@@ -50,17 +68,28 @@ jobs:
           enable-cache: true
           cache-suffix: upstream-sync
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5.0.0
-        with:
-          version: 8.15.9
+      - name: Plan upstream just-bash sync
+        id: sync
+        run: >-
+          uv run python just_py_bash/tools/sync_just_bash.py
+          --target "${{ github.event.inputs.target_ref || 'origin/main' }}"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.3.0
+  create-pr:
+    needs: plan
+    if: needs.plan.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
         with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
+          fetch-depth: 0
+          ref: main
+          submodules: recursive
+          persist-credentials: false
 
       - name: Ensure automation labels exist
         env:
@@ -68,74 +97,88 @@ jobs:
         run: |
           gh label create automation --color 0E8A16 --description "Automated pull request" --force
           gh label create upstream-sync --color 1D76DB --description "Updates the vendored just-bash checkout" --force
-          gh label create release-candidate --color B60205 --description "Run full CI and consider this PR for a manual release" --force
+          gh label create dependencies --color 0366D6 --description "Dependency or upstream version update" --force
+          gh label create release-candidate --color B60205 --description "Run full CI and auto-tag eligible release PRs when merged" --force
 
-      - name: Sync upstream just-bash
-        id: sync
-        run: >-
-          uv run python just_py_bash/tools/sync_just_bash.py
-          --target "${{ github.event.inputs.target_ref || 'origin/main' }}"
-
-      - name: Refresh uv.lock after version bump
-        if: steps.sync.outputs.version_changed == 'true'
-        run: uv lock
+      - name: Apply planned submodule update without building upstream code
+        env:
+          TARGET_SHA: ${{ needs.plan.outputs.to_sha }}
+        run: |
+          current_sha=$(git -C vendor/just-bash rev-parse HEAD)
+          if [[ "$current_sha" != "$TARGET_SHA" ]]; then
+            git -C vendor/just-bash fetch origin --tags --force +refs/heads/*:refs/remotes/origin/*
+            git -C vendor/just-bash checkout --detach "$TARGET_SHA"
+          fi
+          git add vendor/just-bash
+          git diff --cached --submodule=short
 
       - name: Create release-candidate pull request
-        if: steps.sync.outputs.changed == 'true' && steps.sync.outputs.release_candidate == 'true'
+        if: needs.plan.outputs.release_candidate == 'true'
         uses: peter-evans/create-pull-request@v8.1.1
         with:
           branch: automation/sync-just-bash
           delete-branch: true
           commit-message: >-
             chore: sync just-bash to
-            ${{ steps.sync.outputs.to_version }}
-            (${{ steps.sync.outputs.to_sha_short }})
+            ${{ needs.plan.outputs.to_version }}
+            (${{ needs.plan.outputs.to_sha_short }})
           title: >-
             chore: sync just-bash to
-            ${{ steps.sync.outputs.to_version }}
-            (${{ steps.sync.outputs.to_sha_short }})
+            ${{ needs.plan.outputs.to_version }}
+            (${{ needs.plan.outputs.to_sha_short }})
           body: |
             Automated upstream sync.
 
             - upstream ref: `${{ github.event.inputs.target_ref || 'origin/main' }}`
-            - previous sha: `${{ steps.sync.outputs.from_sha }}`
-            - new sha: `${{ steps.sync.outputs.to_sha }}`
-            - previous upstream version: `${{ steps.sync.outputs.from_version }}`
-            - new upstream version: `${{ steps.sync.outputs.to_version }}`
-            - previous `just-py-bash` version: `${{ steps.sync.outputs.python_package_from_version }}`
-            - new `just-py-bash` version: `${{ steps.sync.outputs.python_package_to_version }}`
+            - previous sha: `${{ needs.plan.outputs.from_sha }}`
+            - requested upstream sha: `${{ needs.plan.outputs.requested_sha }}`
+            - synced upstream sha: `${{ needs.plan.outputs.to_sha }}`
+            - previous upstream version: `${{ needs.plan.outputs.from_version }}`
+            - requested upstream version: `${{ needs.plan.outputs.requested_version }}`
+            - synced upstream version: `${{ needs.plan.outputs.to_version }}`
+            - selected sync strategy: `${{ needs.plan.outputs.selected_reason }}`
+            - pinned to version-introduction commit: `${{ needs.plan.outputs.pinned_to_version_commit }}`
+            - release tag on merge: `${{ needs.plan.outputs.release_tag }}`
 
-            This PR is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite. If that suite passes and the PR is merged, the new version can be published with the manual release workflow.
+            `just-py-bash` now uses dynamic versioning from Git tags, so this PR does not bump a static package version in `pyproject.toml`.
+            For safety, sync planning runs in a read-only job and the write-capable PR job only applies the precomputed submodule pointer update. The normal PR CI and Full CI jobs validate the vendored build after the PR is opened.
+            This PR is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite. When it is merged to `main`, the auto-tag workflow will create `${{ needs.plan.outputs.release_tag }}` on the merge commit and the tag-driven release workflow will publish it.
           labels: |
             automation
             upstream-sync
+            dependencies
             release-candidate
 
       - name: Create non-release pull request
-        if: steps.sync.outputs.changed == 'true' && steps.sync.outputs.release_candidate != 'true'
+        if: needs.plan.outputs.release_candidate != 'true'
         uses: peter-evans/create-pull-request@v8.1.1
         with:
           branch: automation/sync-just-bash
           delete-branch: true
           commit-message: >-
             chore: sync just-bash to
-            ${{ steps.sync.outputs.to_version || 'main' }}
-            (${{ steps.sync.outputs.to_sha_short }})
+            ${{ needs.plan.outputs.to_version || 'main' }}
+            (${{ needs.plan.outputs.to_sha_short }})
           title: >-
             chore: sync just-bash to
-            ${{ steps.sync.outputs.to_version || 'main' }}
-            (${{ steps.sync.outputs.to_sha_short }})
+            ${{ needs.plan.outputs.to_version || 'main' }}
+            (${{ needs.plan.outputs.to_sha_short }})
           body: |
             Automated upstream sync.
 
             - upstream ref: `${{ github.event.inputs.target_ref || 'origin/main' }}`
-            - previous sha: `${{ steps.sync.outputs.from_sha }}`
-            - new sha: `${{ steps.sync.outputs.to_sha }}`
-            - previous upstream version: `${{ steps.sync.outputs.from_version }}`
-            - new upstream version: `${{ steps.sync.outputs.to_version }}`
-            - `just-py-bash` version remains: `${{ steps.sync.outputs.python_package_to_version }}`
+            - previous sha: `${{ needs.plan.outputs.from_sha }}`
+            - requested upstream sha: `${{ needs.plan.outputs.requested_sha }}`
+            - synced upstream sha: `${{ needs.plan.outputs.to_sha }}`
+            - previous upstream version: `${{ needs.plan.outputs.from_version }}`
+            - requested upstream version: `${{ needs.plan.outputs.requested_version }}`
+            - synced upstream version: `${{ needs.plan.outputs.to_version }}`
+            - selected sync strategy: `${{ needs.plan.outputs.selected_reason }}`
 
-            Upstream changed without a new upstream package version, so this PR is not marked as a release candidate by default.
+            `just-py-bash` now derives its package version dynamically from release tags.
+            For safety, sync planning runs in a read-only job and the write-capable PR job only applies the precomputed submodule pointer update. The normal PR CI jobs validate the vendored build after the PR is opened.
+            Upstream changed without a new upstream package version, so this PR is not marked as a release candidate or auto-tagged by default.
           labels: |-
             automation
             upstream-sync
+            dependencies

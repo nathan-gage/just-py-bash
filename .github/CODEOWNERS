@@ -1,0 +1,10 @@
+# Release and automation control plane
+/.github/workflows/ @nathan-gage
+/.github/release.yml @nathan-gage
+/tools/ @nathan-gage
+/pyproject.toml @nathan-gage
+/just_py_bash/pyproject.toml @nathan-gage
+/just_bash_bundled_runtime/pyproject.toml @nathan-gage
+/just_py_bash/tools/ @nathan-gage
+/just_bash_bundled_runtime/tools/ @nathan-gage
+/tests/contracts/test_release_metadata.py @nathan-gage

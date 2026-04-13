@@ -1,7 +1,9 @@
 name: Release just-py-bash
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
@@ -11,99 +13,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  detect:
+  build:
+    name: Build release artifacts
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      tag: ${{ steps.version.outputs.tag }}
-      tag_exists: ${{ steps.version.outputs.tag_exists }}
-      ref: ${{ steps.version.outputs.ref }}
 
     steps:
-      - name: Validate workflow ref
-        env:
-          WORKFLOW_REF: ${{ github.ref }}
-        run: |
-          case "$WORKFLOW_REF" in
-            refs/heads/main) ;;
-            *)
-              echo "Release workflows must be dispatched from refs/heads/main; got: $WORKFLOW_REF" >&2
-              exit 1
-              ;;
-          esac
-
       - name: Check out repository
         uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
-          ref: main
           submodules: recursive
           persist-credentials: false
 
-      - name: Read package version
-        id: version
+      - name: Validate release tag semantics and main ancestry
         shell: bash
+        env:
+          TAG_NAME: ${{ github.ref_name }}
         run: |
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import subprocess
-          import tomllib
-          from pathlib import Path
-
-          version = tomllib.loads(Path("just_py_bash/pyproject.toml").read_text())['project']['version']
-          tag = f"v{version}"
-          completed = subprocess.run(
-              ["git", "tag", "-l", tag],
-              check=True,
-              capture_output=True,
-              text=True,
-          )
-          tag_exists = "true" if tag in completed.stdout.splitlines() else "false"
-          ref = subprocess.run(
-              ["git", "rev-parse", "HEAD"],
-              check=True,
-              capture_output=True,
-              text=True,
-          ).stdout.strip()
-          print(f"version={version}")
-          print(f"tag={tag}")
-          print(f"tag_exists={tag_exists}")
-          print(f"ref={ref}")
-          PY
-
-      - name: Report decision
-        run: |
-          echo "version=${{ steps.version.outputs.version }}"
-          echo "tag=${{ steps.version.outputs.tag }}"
-          echo "tag_exists=${{ steps.version.outputs.tag_exists }}"
-          echo "ref=${{ steps.version.outputs.ref }}"
-
-      - name: Fail if tag already exists
-        if: steps.version.outputs.tag_exists == 'true'
-        run: |
-          echo "Tag ${{ steps.version.outputs.tag }} already exists."
-          exit 1
-
-  release:
-    needs: detect
-    if: needs.detect.outputs.tag_exists != 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-    environment:
-      name: pypi-just-py-bash
-      url: https://pypi.org/p/just-py-bash
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6.0.2
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.detect.outputs.ref }}
-          submodules: recursive
-          persist-credentials: false
+          git fetch origin --force +refs/heads/main:refs/remotes/origin/main
+          python tools/release_metadata.py validate-tag just-py-bash --tag "$TAG_NAME"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v8.0.0
@@ -127,21 +56,112 @@ jobs:
       - name: Build distributions
         run: make build-package
 
-      - name: Create and push tag
+      - name: Validate built distribution version matches tag
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.detect.outputs.tag }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$TAG"
-          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TAG"
+          TAG_NAME: ${{ github.ref_name }}
+        run: python tools/release_metadata.py validate-artifacts just-py-bash --tag "$TAG_NAME" --dist-dir dist
 
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.detect.outputs.tag }}
-        run: gh release create "$TAG" dist/* --generate-notes
+      - name: Check distribution metadata
+        run: uvx twine check dist/*
+
+      - name: Smoke test wheel
+        shell: bash
+        run: |
+          wheel=$(echo dist/*.whl)
+          uv run --isolated --no-project --with "$wheel" just-py-bash --help
+
+      - name: Smoke test sdist
+        shell: bash
+        run: |
+          sdist=$(echo dist/*.tar.gz)
+          uv run --isolated --no-project --with "$sdist" just-py-bash --help
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+
+    environment:
+      name: testpypi-just-py-bash
+      url: https://test.pypi.org/project/just-py-bash/
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@v1.14.0
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          packages-dir: dist/
+          skip-existing: true
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [publish-testpypi]
+    runs-on: ubuntu-latest
+
+    environment:
+      name: pypi-just-py-bash
+      url: https://pypi.org/project/just-py-bash/
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
 
       - name: Publish to PyPI
-        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/*
+        uses: pypa/gh-action-pypi-publish@v1.14.0
+        with:
+          packages-dir: dist/
+          skip-existing: true
+
+  github-release:
+    name: Create GitHub release
+    needs: [publish-pypi]
+    if: needs.publish-pypi.result == 'success'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |-
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --generate-notes \
+              --latest \
+              dist/*
+          fi

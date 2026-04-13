@@ -647,11 +647,7 @@ The repo's own workspace is already wired to use the local package during `uv sy
 
 ### Versioning and release flow
 
-- When upstream `just-bash` releases `X.Y.Z`, `just-py-bash` aims to release the matching version `X.Y.Z`.
-- If the Python wrapper needs a follow-up release without a new upstream `just-bash` version, use a PEP 440 post-release such as `X.Y.Z.post1`.
-- To cut a Python-only follow-up release, bump `just_py_bash/pyproject.toml` to `X.Y.Z.postN`, merge the PR after it passes CI, and then run the manual `Release just-py-bash` workflow against `main` (or the specific ref you want to publish).
-- PRs intended to become releases should be labeled `release-candidate`. That label triggers the expensive Full CI workflow, including packaging and compatibility coverage.
-- Merging to `main` does **not** publish automatically. Publishing is a separate manual step via the release workflows after the relevant PR has passed Full CI.
+See [VERSIONING.md](VERSIONING.md) for the package version semantics, tag formats, runtime-version policy, and tag-driven release flow.
 
 ## Conformance Testing
 

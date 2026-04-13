@@ -4,13 +4,13 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tomllib
 import urllib.request
 from pathlib import Path
 
+from runtime_config import read_runtime_config, release_tag_for_version, update_runtime_node_version
+
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 PYPROJECT = PACKAGE_DIR / "pyproject.toml"
-TARGET_MAJOR = 22
 
 
 def write_output(name: str, value: str) -> None:
@@ -20,14 +20,6 @@ def write_output(name: str, value: str) -> None:
 
     with Path(output_path).open("a", encoding="utf-8") as handle:
         handle.write(f"{name}={value}\n")
-
-
-def read_current_version() -> str:
-    payload = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
-    version = payload["project"]["version"]
-    if not isinstance(version, str):
-        raise RuntimeError(f"Invalid version in {PYPROJECT}")
-    return version
 
 
 def fetch_latest_lts_version(major: int) -> str:
@@ -64,29 +56,22 @@ def fetch_latest_lts_version(major: int) -> str:
     raise RuntimeError(f"Could not find an LTS Node {major} release")
 
 
-def update_version(new_version: str) -> None:
-    text = PYPROJECT.read_text(encoding="utf-8")
-    current = read_current_version()
-    old_line = f'version = "{current}"'
-    new_line = f'version = "{new_version}"'
-    if old_line not in text:
-        raise RuntimeError(f"Could not find version line {old_line!r} in {PYPROJECT}")
-    PYPROJECT.write_text(text.replace(old_line, new_line, 1), encoding="utf-8")
-
-
 def main() -> int:
-    current_version = read_current_version()
-    latest_version = fetch_latest_lts_version(TARGET_MAJOR)
+    config = read_runtime_config(PYPROJECT)
+    current_version = config.node_version
+    target_major = config.target_major
+    latest_version = fetch_latest_lts_version(target_major)
     changed = current_version != latest_version
 
     if changed:
-        update_version(latest_version)
+        update_runtime_node_version(latest_version, PYPROJECT)
 
     outputs = {
         "changed": str(changed).lower(),
         "from_version": current_version,
         "to_version": latest_version,
-        "target_major": str(TARGET_MAJOR),
+        "target_major": str(target_major),
+        "release_tag": release_tag_for_version(latest_version),
     }
     for name, value in outputs.items():
         write_output(name, value)

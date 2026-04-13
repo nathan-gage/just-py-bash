@@ -23,6 +23,12 @@ lint = [
 [tool.uv]
 package = false
 default-groups = ["dev", "lint"]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "just_py_bash/pyproject.toml" },
+  { file = "just_bash_bundled_runtime/pyproject.toml" },
+  { git = { commit = true, tags = true } },
+]
 
 [tool.uv.sources]
 just-py-bash = { path = "just_py_bash", editable = true }
@@ -47,6 +53,7 @@ include = [
   "just_bash_bundled_runtime/tools/**/*.py",
   "just_bash_bundled_runtime/hatch_build.py",
   "tests/**/*.py",
+  "tools/**/*.py",
 ]
 extend-exclude = [
   "just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime",
@@ -71,6 +78,7 @@ include = [
   "just_bash_bundled_runtime/src",
   "just_bash_bundled_runtime/tools",
   "tests",
+  "tools",
 ]
 exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime"]
 venvPath = "."
@@ -97,6 +105,7 @@ files = [
   "just_bash_bundled_runtime/src",
   "just_bash_bundled_runtime/tools",
   "tests",
+  "tools",
 ]
 exclude = ["just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime/"]
 mypy_path = "just_py_bash/src"
