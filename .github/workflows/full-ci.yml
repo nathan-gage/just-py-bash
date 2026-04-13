@@ -77,7 +77,10 @@ jobs:
               "just_bash_bundled_runtime/pyproject.toml",
               "just_bash_bundled_runtime/hatch_build.py",
               "just_bash_bundled_runtime/tools/*",
+              "tools/*",
+              "tools/**",
               "tests/contracts/test_distributions.py",
+              "tests/contracts/test_release_metadata.py",
           ]
 
           def changed_files(base: str, head: str, *, use_merge_base: bool) -> list[str]:
