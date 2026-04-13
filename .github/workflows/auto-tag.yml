@@ -1,0 +1,106 @@
+name: Auto-tag release candidates
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: auto-tag-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  just-py-bash:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.merge_commit_sha != '' &&
+      contains(github.event.pull_request.labels.*.name, 'release-candidate') &&
+      contains(github.event.pull_request.labels.*.name, 'upstream-sync')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Read upstream release version and check for existing tag
+        id: version
+        shell: bash
+        env:
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          git fetch origin --tags --force +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$MERGE_COMMIT_SHA" origin/main
+          python tools/release_metadata.py describe just-py-bash --check-tag-exists --github-output
+
+      - name: Report decision
+        run: |
+          echo "version=${{ steps.version.outputs.version }}"
+          echo "tag=${{ steps.version.outputs.tag }}"
+          echo "tag_exists=${{ steps.version.outputs.tag_exists }}"
+
+      - name: Create and push tag
+        if: steps.version.outputs.tag_exists != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$MERGE_COMMIT_SHA" -m "Release $TAG"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TAG"
+
+  bundled-runtime:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.merge_commit_sha != '' &&
+      contains(github.event.pull_request.labels.*.name, 'release-candidate') &&
+      contains(github.event.pull_request.labels.*.name, 'bundled-runtime')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
+
+      - name: Read bundled runtime release version and check for existing tag
+        id: version
+        shell: bash
+        env:
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          git fetch origin --tags --force +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$MERGE_COMMIT_SHA" origin/main
+          python tools/release_metadata.py describe bundled-runtime --check-tag-exists --github-output
+
+      - name: Report decision
+        run: |
+          echo "version=${{ steps.version.outputs.version }}"
+          echo "tag=${{ steps.version.outputs.tag }}"
+          echo "tag_exists=${{ steps.version.outputs.tag_exists }}"
+
+      - name: Create and push bundled runtime tag
+        if: steps.version.outputs.tag_exists != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |-
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$MERGE_COMMIT_SHA" -m "Release $TAG"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$TAG"

@@ -1,6 +1,6 @@
 [project]
 name = "just-bash-bundled-runtime"
-version = "22.22.2"
+dynamic = ["version"]
 description = "First-party bundled Node.js runtime provider for just-py-bash"
 readme = "README.md"
 authors = [{ name = "Nathan Gage", email = "nathan@sweetspot.so" }]
@@ -14,8 +14,22 @@ classifiers = [
 ]
 
 [build-system]
-requires = ["hatchling>=1.29.0"]
+requires = ["hatchling>=1.29.0", "uv-dynamic-versioning>=0.7.0"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
+pattern-prefix = "runtime/"
+fallback-version = "22.22.2"
+
+[tool.just-bash-bundled-runtime]
+node-version = "22.22.2"
+target-major = 22
 
 [tool.hatch.build]
 artifacts = [

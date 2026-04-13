@@ -11,7 +11,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SUBMODULE = ROOT / "vendor" / "just-bash"
 PACKAGE_JSON = SUBMODULE / "package.json"
-PYTHON_PACKAGE_PYPROJECT = ROOT / "just_py_bash" / "pyproject.toml"
 
 
 def run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -41,23 +40,12 @@ def read_upstream_version() -> str:
     return version
 
 
-def read_python_package_version() -> str:
-    for raw_line in PYTHON_PACKAGE_PYPROJECT.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if line.startswith("version = "):
-            _, _, value = line.partition("=")
-            return value.strip().strip('"')
-    raise RuntimeError(f"Could not read just-py-bash version from {PYTHON_PACKAGE_PYPROJECT}")
-
-
-def update_python_package_version(new_version: str) -> None:
-    current_version = read_python_package_version()
-    old_line = f'version = "{current_version}"'
-    new_line = f'version = "{new_version}"'
-    text = PYTHON_PACKAGE_PYPROJECT.read_text(encoding="utf-8")
-    if old_line not in text:
-        raise RuntimeError(f"Could not find version line {old_line!r} in {PYTHON_PACKAGE_PYPROJECT}")
-    PYTHON_PACKAGE_PYPROJECT.write_text(text.replace(old_line, new_line, 1), encoding="utf-8")
+def read_upstream_version_at(ref: str) -> str:
+    payload = json.loads(run(["git", "show", f"{ref}:package.json"], cwd=SUBMODULE).stdout)
+    version = payload.get("version")
+    if not isinstance(version, str):
+        raise RuntimeError(f"Could not read just-bash version from {ref}:package.json")
+    return version
 
 
 def git(*args: str, cwd: Path) -> str:
@@ -66,6 +54,32 @@ def git(*args: str, cwd: Path) -> str:
 
 def short_sha(value: str) -> str:
     return value[:7]
+
+
+def first_parent(ref: str) -> str | None:
+    completed = subprocess.run(
+        ["git", "rev-parse", f"{ref}^1"],
+        cwd=SUBMODULE,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    parent = completed.stdout.strip()
+    return parent or None
+
+
+def find_version_introduction_commit(target_sha: str, target_version: str) -> str:
+    candidate = target_sha
+    while True:
+        parent = first_parent(candidate)
+        if parent is None:
+            return candidate
+        parent_version = read_upstream_version_at(parent)
+        if parent_version != target_version:
+            return candidate
+        candidate = parent
 
 
 def main() -> int:
@@ -81,26 +95,35 @@ def main() -> int:
         raise RuntimeError(f"Missing submodule checkout: {SUBMODULE}")
 
     run(["git", "submodule", "update", "--init", "--recursive"], cwd=ROOT)
-    git("fetch", "origin", "--tags", "main", cwd=SUBMODULE)
+    run(
+        ["git", "fetch", "origin", "--tags", "--force", "+refs/heads/*:refs/remotes/origin/*"],
+        cwd=SUBMODULE,
+    )
 
     from_sha = git("rev-parse", "HEAD", cwd=SUBMODULE)
     from_version = read_upstream_version()
-    python_package_from_version = read_python_package_version()
-    to_sha = git("rev-parse", args.target, cwd=SUBMODULE)
+
+    requested_sha = git("rev-parse", args.target, cwd=SUBMODULE)
+    requested_version = read_upstream_version_at(requested_sha)
+
+    version_changed = from_version != requested_version
+    to_sha = requested_sha
+    selected_reason = "requested upstream ref"
+    pinned_to_version_commit = False
+    if version_changed:
+        to_sha = find_version_introduction_commit(requested_sha, requested_version)
+        pinned_to_version_commit = to_sha != requested_sha
+        selected_reason = (
+            "commit where the target upstream version was introduced"
+            if pinned_to_version_commit
+            else "requested upstream ref is already the version introduction commit"
+        )
 
     changed = from_sha != to_sha
     if changed:
         run(["git", "checkout", "--detach", to_sha], cwd=SUBMODULE)
-        run(["pnpm", "install", "--frozen-lockfile"], cwd=SUBMODULE)
-        run(["pnpm", "build"], cwd=SUBMODULE)
 
     to_version = read_upstream_version()
-    version_changed = from_version != to_version
-
-    python_package_to_version = python_package_from_version
-    if version_changed and python_package_from_version != to_version:
-        update_python_package_version(to_version)
-        python_package_to_version = to_version
 
     outputs = {
         "changed": str(changed).lower(),
@@ -111,10 +134,14 @@ def main() -> int:
         "from_version": from_version,
         "to_version": to_version,
         "version_changed": str(version_changed).lower(),
-        "python_package_from_version": python_package_from_version,
-        "python_package_to_version": python_package_to_version,
         "release_candidate": str(version_changed).lower(),
         "target": args.target,
+        "requested_sha": requested_sha,
+        "requested_sha_short": short_sha(requested_sha),
+        "requested_version": requested_version,
+        "pinned_to_version_commit": str(pinned_to_version_commit).lower(),
+        "selected_reason": selected_reason,
+        "release_tag": f"v{to_version}",
     }
 
     for name, value in outputs.items():

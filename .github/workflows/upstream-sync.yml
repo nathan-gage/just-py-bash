@@ -50,35 +50,19 @@ jobs:
           enable-cache: true
           cache-suffix: upstream-sync
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v5.0.0
-        with:
-          version: 8.15.9
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6.3.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: vendor/just-bash/pnpm-lock.yaml
-
       - name: Ensure automation labels exist
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh label create automation --color 0E8A16 --description "Automated pull request" --force
           gh label create upstream-sync --color 1D76DB --description "Updates the vendored just-bash checkout" --force
-          gh label create release-candidate --color B60205 --description "Run full CI and consider this PR for a manual release" --force
+          gh label create release-candidate --color B60205 --description "Run full CI and auto-tag eligible release PRs when merged" --force
 
       - name: Sync upstream just-bash
         id: sync
         run: >-
           uv run python just_py_bash/tools/sync_just_bash.py
           --target "${{ github.event.inputs.target_ref || 'origin/main' }}"
-
-      - name: Refresh uv.lock after version bump
-        if: steps.sync.outputs.version_changed == 'true'
-        run: uv lock
 
       - name: Create release-candidate pull request
         if: steps.sync.outputs.changed == 'true' && steps.sync.outputs.release_candidate == 'true'
@@ -99,13 +83,18 @@ jobs:
 
             - upstream ref: `${{ github.event.inputs.target_ref || 'origin/main' }}`
             - previous sha: `${{ steps.sync.outputs.from_sha }}`
-            - new sha: `${{ steps.sync.outputs.to_sha }}`
+            - requested upstream sha: `${{ steps.sync.outputs.requested_sha }}`
+            - synced upstream sha: `${{ steps.sync.outputs.to_sha }}`
             - previous upstream version: `${{ steps.sync.outputs.from_version }}`
-            - new upstream version: `${{ steps.sync.outputs.to_version }}`
-            - previous `just-py-bash` version: `${{ steps.sync.outputs.python_package_from_version }}`
-            - new `just-py-bash` version: `${{ steps.sync.outputs.python_package_to_version }}`
+            - requested upstream version: `${{ steps.sync.outputs.requested_version }}`
+            - synced upstream version: `${{ steps.sync.outputs.to_version }}`
+            - selected sync strategy: `${{ steps.sync.outputs.selected_reason }}`
+            - pinned to version-introduction commit: `${{ steps.sync.outputs.pinned_to_version_commit }}`
+            - release tag on merge: `${{ steps.sync.outputs.release_tag }}`
 
-            This PR is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite. If that suite passes and the PR is merged, the new version can be published with the manual release workflow.
+            `just-py-bash` now uses dynamic versioning from Git tags, so this PR does not bump a static package version in `pyproject.toml`.
+            For safety, this sync workflow no longer installs or builds upstream code before review; the normal PR CI and Full CI jobs validate the vendored build after the PR is opened.
+            This PR is labeled `release-candidate`, so Full CI will run the expensive packaging and compatibility suite. When it is merged to `main`, the auto-tag workflow will create `${{ steps.sync.outputs.release_tag }}` on the merge commit and the tag-driven release workflow will publish it.
           labels: |
             automation
             upstream-sync
@@ -130,12 +119,16 @@ jobs:
 
             - upstream ref: `${{ github.event.inputs.target_ref || 'origin/main' }}`
             - previous sha: `${{ steps.sync.outputs.from_sha }}`
-            - new sha: `${{ steps.sync.outputs.to_sha }}`
+            - requested upstream sha: `${{ steps.sync.outputs.requested_sha }}`
+            - synced upstream sha: `${{ steps.sync.outputs.to_sha }}`
             - previous upstream version: `${{ steps.sync.outputs.from_version }}`
-            - new upstream version: `${{ steps.sync.outputs.to_version }}`
-            - `just-py-bash` version remains: `${{ steps.sync.outputs.python_package_to_version }}`
+            - requested upstream version: `${{ steps.sync.outputs.requested_version }}`
+            - synced upstream version: `${{ steps.sync.outputs.to_version }}`
+            - selected sync strategy: `${{ steps.sync.outputs.selected_reason }}`
 
-            Upstream changed without a new upstream package version, so this PR is not marked as a release candidate by default.
+            `just-py-bash` now derives its package version dynamically from release tags.
+            For safety, this sync workflow no longer installs or builds upstream code before review; the normal PR CI jobs validate the vendored build after the PR is opened.
+            Upstream changed without a new upstream package version, so this PR is not marked as a release candidate or auto-tagged by default.
           labels: |-
             automation
             upstream-sync

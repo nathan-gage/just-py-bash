@@ -9,11 +9,12 @@ import shutil
 import sys
 import tarfile
 import tempfile
-import tomllib
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+
+from runtime_config import read_runtime_config
 
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 
@@ -52,14 +53,6 @@ def current_target() -> NodeTarget:
             return NodeTarget(platform="win-arm64", extension=".zip")
 
     raise RuntimeError(f"Unsupported Node.js target for platform={sys.platform!r}, machine={platform.machine()!r}")
-
-
-def read_package_version(package_dir: Path) -> str:
-    payload = tomllib.loads((package_dir / "pyproject.toml").read_text(encoding="utf-8"))
-    version = payload["project"]["version"]
-    if not isinstance(version, str):
-        raise RuntimeError(f"Invalid version in {(package_dir / 'pyproject.toml')}")
-    return version
 
 
 def release_base_url(node_version: str) -> str:
@@ -127,7 +120,14 @@ def extract_archive(archive_path: Path, destination: Path) -> None:
 
 
 def vendor_runtime(package_dir: Path) -> None:
-    node_version = read_package_version(package_dir)
+    config = read_runtime_config(package_dir / "pyproject.toml")
+    node_version = config.node_version
+    target_major = config.target_major
+    if node_version.split(".", maxsplit=1)[0] != str(target_major):
+        raise RuntimeError(
+            f"Configured node-version {node_version!r} does not match target-major {target_major!r} in {package_dir / 'pyproject.toml'}",
+        )
+
     target = current_target()
     release_url = release_base_url(node_version)
     name = archive_name(node_version, target)
