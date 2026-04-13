@@ -14,7 +14,10 @@ from pathlib import Path
 from typing import cast
 
 ROOT = Path(__file__).resolve().parents[1]
-JUST_BASH_PACKAGE_JSON = ROOT / "vendor" / "just-bash" / "package.json"
+JUST_BASH_PACKAGE_JSON_CANDIDATES = [
+    ROOT / "vendor" / "just-bash" / "package.json",
+    ROOT / "just_py_bash" / "src" / "just_bash" / "_vendor" / "just-bash" / "package.json",
+]
 BUNDLED_RUNTIME_PYPROJECT = ROOT / "just_bash_bundled_runtime" / "pyproject.toml"
 VERSION_PATTERN = re.compile(r"^(?P<base>\d+\.\d+\.\d+)(?:\.post\d+)?$")
 
@@ -88,12 +91,21 @@ def read_bundled_runtime_node_version() -> str:
     return node_version
 
 
+def find_just_bash_package_json() -> Path:
+    for candidate in JUST_BASH_PACKAGE_JSON_CANDIDATES:
+        if candidate.is_file():
+            return candidate
+    searched = ", ".join(str(path) for path in JUST_BASH_PACKAGE_JSON_CANDIDATES)
+    raise RuntimeError(f"Could not find just-bash package.json in any expected location: {searched}")
+
+
 def read_target_base_version(target: ReleaseTarget) -> str:
     if target == JUST_PY_BASH:
-        payload = read_json(JUST_BASH_PACKAGE_JSON)
+        package_json = find_just_bash_package_json()
+        payload = read_json(package_json)
         version = payload.get("version")
         if not isinstance(version, str):
-            raise RuntimeError(f"Invalid version in {JUST_BASH_PACKAGE_JSON}")
+            raise RuntimeError(f"Invalid version in {package_json}")
         return version
 
     if target == BUNDLED_RUNTIME:
