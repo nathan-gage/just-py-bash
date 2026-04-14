@@ -34,6 +34,8 @@ Python wrapper for [just-bash](https://github.com/vercel-labs/just-bash), a virt
 Install name: `just-py-bash`  
 Import name: `just_bash`
 
+> `js-exec` / `JavaScriptConfig(...)` require Node.js >= 22.6. If you want the JavaScript runtime without depending on a system Node version, install `just-py-bash[node]`.
+
 ## Quick start
 
 ```python

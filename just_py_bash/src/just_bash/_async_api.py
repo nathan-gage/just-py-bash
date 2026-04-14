@@ -13,6 +13,7 @@ from ._fs import FileSystemConfig, InitialFileValue
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._option_hooks import BashLogger, DefenseInDepthConfig, FeatureCoverageWriter, FetchCallback, TraceCallback
 from ._options import BashOptions, ExecOptions
+from ._runtime_compat import ensure_runtime_configuration_supported
 from ._session_fs import AsyncSessionFs
 from ._transform import BashTransformResult, TransformPlugin
 from ._types import NetworkConfig, ProcessInfo
@@ -134,6 +135,11 @@ class AsyncBash:
         if self._closed:
             raise BridgeError("just-bash bridge is closed")
 
+        await asyncio.to_thread(
+            ensure_runtime_configuration_supported,
+            self._options,
+            node_command=self._node_command,
+        )
         init_options, hooks = self._options.to_bridge_init()
         bridge = await AsyncNodeBridge.open(
             init_options=init_options,

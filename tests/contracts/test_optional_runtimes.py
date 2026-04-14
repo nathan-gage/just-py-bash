@@ -57,6 +57,16 @@ def use_packaged_runtime(monkeypatch: MonkeyPatch, packaged_runtime_artifacts: t
     monkeypatch.setenv("JUST_BASH_PACKAGE_JSON", package_json)
 
 
+def assert_unsupported_javascript_runtime(error: Exception) -> None:
+    api = public_api()
+    assert isinstance(error, api.UnsupportedRuntimeConfigurationError)
+    assert error.feature == "javascript"
+    assert error.required_version == "22.6.0"
+    assert error.actual_version is not None
+    assert "just-py-bash[node]" in str(error)
+    assert "node:module.stripTypeScriptTypes" in str(error)
+
+
 def test_python_runtime_executes_when_enabled(
     monkeypatch: MonkeyPatch,
     packaged_runtime_artifacts: tuple[str, str],
@@ -101,8 +111,12 @@ def test_javascript_runtime_executes_when_enabled(
     Bash = api.Bash
     JavaScriptConfig = api.JavaScriptConfig
 
-    with Bash(javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapped';")) as bash:
-        result = bash.exec("js-exec -c 'console.log(globalThis.prefix + \":\" + (2 + 3))'", timeout=60)
+    try:
+        with Bash(javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapped';")) as bash:
+            result = bash.exec("js-exec -c 'console.log(globalThis.prefix + \":\" + (2 + 3))'", timeout=60)
+    except api.UnsupportedRuntimeConfigurationError as exc:
+        assert_unsupported_javascript_runtime(exc)
+        return
 
     assert result.exit_code == 0
     assert result.stdout == "bootstrapped:5\n"
@@ -119,8 +133,12 @@ def test_async_javascript_runtime_executes_when_enabled(
     JavaScriptConfig = api.JavaScriptConfig
 
     async def exercise() -> None:
-        async with AsyncBash(javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapped';")) as bash:
-            result = await bash.exec("js-exec -c 'console.log(globalThis.prefix + \":\" + (2 + 3))'", timeout=60)
+        try:
+            async with AsyncBash(javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapped';")) as bash:
+                result = await bash.exec("js-exec -c 'console.log(globalThis.prefix + \":\" + (2 + 3))'", timeout=60)
+        except api.UnsupportedRuntimeConfigurationError as exc:
+            assert_unsupported_javascript_runtime(exc)
+            return
 
         assert result.exit_code == 0
         assert result.stdout == "bootstrapped:5\n"
@@ -134,12 +152,17 @@ def test_async_javascript_runtime_exec_timeout_leaves_async_session_usable(
     packaged_runtime_artifacts: tuple[str, str],
 ) -> None:
     use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
-    AsyncBash = public_api().AsyncBash
+    api = public_api()
+    AsyncBash = api.AsyncBash
 
     async def exercise() -> None:
-        async with AsyncBash(files={"/workspace/seed.txt": "seed\n"}, cwd="/workspace", javascript=True) as bash:
-            result = await bash.exec("js-exec -c 'while(true){}'", timeout=0.01)
-            follow_up = await bash.exec("cat seed.txt", timeout=60)
+        try:
+            async with AsyncBash(files={"/workspace/seed.txt": "seed\n"}, cwd="/workspace", javascript=True) as bash:
+                result = await bash.exec("js-exec -c 'while(true){}'", timeout=0.01)
+                follow_up = await bash.exec("cat seed.txt", timeout=60)
+        except api.UnsupportedRuntimeConfigurationError as exc:
+            assert_unsupported_javascript_runtime(exc)
+            return
 
         assert result.stdout == ""
         if result.exit_code == 124:
@@ -177,11 +200,15 @@ def test_async_packaged_runtime_fetch_hook_round_trips_through_javascript(
                 url=request.url,
             )
 
-        async with AsyncBash(javascript=True, fetch=fetch) as bash:
-            result = await bash.exec(
-                "js-exec -c \"fetch('https://example.com').then(r=>r.text()).then(t=>console.log(t))\"",
-                timeout=60,
-            )
+        try:
+            async with AsyncBash(javascript=True, fetch=fetch) as bash:
+                result = await bash.exec(
+                    "js-exec -c \"fetch('https://example.com').then(r=>r.text()).then(t=>console.log(t))\"",
+                    timeout=60,
+                )
+        except api.UnsupportedRuntimeConfigurationError as exc:
+            assert_unsupported_javascript_runtime(exc)
+            return
 
         assert result.exit_code == 0
         assert result.stdout == "hooked fetch\n"
@@ -201,15 +228,19 @@ def test_async_packaged_runtime_matches_downstream_javascript_bootstrap_scenario
     JavaScriptConfig = api.JavaScriptConfig
 
     async def exercise() -> None:
-        async with AsyncBash(
-            python=True,
-            javascript=JavaScriptConfig(bootstrap="globalThis.answer = 42;"),
-            commands=["echo"],
-        ) as bash:
-            echo_result = await bash.exec("echo allowed", timeout=60)
-            cat_result = await bash.exec("cat missing.txt", timeout=60)
-            python_result = await bash.exec('python -c "print(2 + 3)"', timeout=60)
-            javascript_result = await bash.exec('js-exec -c "console.log(globalThis.answer)"', timeout=60)
+        try:
+            async with AsyncBash(
+                python=True,
+                javascript=JavaScriptConfig(bootstrap="globalThis.answer = 42;"),
+                commands=["echo"],
+            ) as bash:
+                echo_result = await bash.exec("echo allowed", timeout=60)
+                cat_result = await bash.exec("cat missing.txt", timeout=60)
+                python_result = await bash.exec('python -c "print(2 + 3)"', timeout=60)
+                javascript_result = await bash.exec('js-exec -c "console.log(globalThis.answer)"', timeout=60)
+        except api.UnsupportedRuntimeConfigurationError as exc:
+            assert_unsupported_javascript_runtime(exc)
+            return
 
         assert echo_result.stdout == "allowed\n"
         assert cat_result.exit_code == 127
@@ -261,17 +292,21 @@ def test_async_packaged_runtime_matches_downstream_fetch_logger_and_coverage_sce
                 url=request.url,
             )
 
-        async with AsyncBash(
-            javascript=True,
-            fetch=fetch,
-            logger=logger,
-            coverage=coverage,
-        ) as bash:
-            echo_result = await bash.exec("echo hello", timeout=60)
-            fetch_result = await bash.exec(
-                "js-exec -c \"fetch('https://example.test/data').then(r=>r.text()).then(t=>console.log(t))\"",
-                timeout=60,
-            )
+        try:
+            async with AsyncBash(
+                javascript=True,
+                fetch=fetch,
+                logger=logger,
+                coverage=coverage,
+            ) as bash:
+                echo_result = await bash.exec("echo hello", timeout=60)
+                fetch_result = await bash.exec(
+                    "js-exec -c \"fetch('https://example.test/data').then(r=>r.text()).then(t=>console.log(t))\"",
+                    timeout=60,
+                )
+        except api.UnsupportedRuntimeConfigurationError as exc:
+            assert_unsupported_javascript_runtime(exc)
+            return
 
         assert echo_result.stdout == "hello\n"
         assert fetch_result.stdout == "hooked fetch\n"

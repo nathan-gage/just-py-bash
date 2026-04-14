@@ -11,6 +11,7 @@ from ._fs import FileSystemConfig, InitialFileValue
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._option_hooks import BashLogger, DefenseInDepthConfig, FeatureCoverageWriter, FetchCallback, TraceCallback
 from ._options import BashOptions, ExecOptions
+from ._runtime_compat import ensure_runtime_configuration_supported
 from ._session_fs import SessionFs
 from ._transform import BashTransformResult, TransformPlugin
 from ._types import NetworkConfig, ProcessInfo
@@ -104,6 +105,7 @@ class Bash:
         self._node_command = tuple(str(part) for part in node_command) if node_command is not None else None
         self._js_entry = js_entry
         self._package_json = package_json
+        ensure_runtime_configuration_supported(options, node_command=self._node_command)
         init_options, hooks = options.to_bridge_init()
         self._bridge = NodeBridge(
             init_options=init_options,

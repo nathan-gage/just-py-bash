@@ -16,6 +16,18 @@ def fake_node_command(script_path: Path) -> list[str]:
     return [sys.executable, str(script_path)]
 
 
+def write_fake_old_node(script_path: Path, *, version: str = "v20.20.2") -> None:
+    script_path.write_text(
+        "from __future__ import annotations\n"
+        "import sys\n"
+        "if '--version' in sys.argv:\n"
+        f"    print({version!r})\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit('fake old node should only be used for --version probing')\n",
+        encoding="utf-8",
+    )
+
+
 def test_bash_from_options_constructs_session() -> None:
     api = public_api()
     options = api.BashOptions(cwd="/workspace", files={"/workspace/seed.txt": "seed\n"})
@@ -48,6 +60,22 @@ def test_bash_raises_backend_unavailable_when_node_command_is_missing() -> None:
 
     with pytest.raises(api.BackendUnavailableError):
         api.Bash(node_command=["/definitely/missing/just-bash-node"])
+
+
+def test_bash_raises_unsupported_runtime_configuration_for_javascript_on_old_node(tmp_path: Path) -> None:
+    api = public_api()
+    fake_node = tmp_path / "old-node.py"
+    write_fake_old_node(fake_node)
+
+    with pytest.raises(api.UnsupportedRuntimeConfigurationError) as exc_info:
+        api.Bash(javascript=True, node_command=fake_node_command(fake_node))
+
+    error = exc_info.value
+    assert error.feature == "javascript"
+    assert error.required_version == "22.6.0"
+    assert error.actual_version == "20.20.2"
+    assert error.node_command == tuple(fake_node_command(fake_node))
+    assert "just-py-bash[node]" in str(error)
 
 
 def test_bash_raises_bridge_error_on_malformed_worker_response(tmp_path: Path) -> None:
@@ -131,6 +159,26 @@ def test_async_bash_raises_backend_unavailable_when_node_command_is_missing() ->
         with pytest.raises(api.BackendUnavailableError):
             async with api.AsyncBash(node_command=["/definitely/missing/just-bash-node"]):
                 pass
+
+    asyncio.run(exercise())
+
+
+def test_async_bash_raises_unsupported_runtime_configuration_for_javascript_on_old_node(tmp_path: Path) -> None:
+    api = public_api()
+    fake_node = tmp_path / "async-old-node.py"
+    write_fake_old_node(fake_node)
+
+    async def exercise() -> None:
+        with pytest.raises(api.UnsupportedRuntimeConfigurationError) as exc_info:
+            async with api.AsyncBash(javascript=True, node_command=fake_node_command(fake_node)):
+                pass
+
+        error = exc_info.value
+        assert error.feature == "javascript"
+        assert error.required_version == "22.6.0"
+        assert error.actual_version == "20.20.2"
+        assert error.node_command == tuple(fake_node_command(fake_node))
+        assert "just-py-bash[node]" in str(error)
 
     asyncio.run(exercise())
 

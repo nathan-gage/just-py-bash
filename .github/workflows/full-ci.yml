@@ -625,18 +625,8 @@ jobs:
       - name: Run packaged JavaScript runtime compatibility tests
         shell: bash
         run: |-
-          set +e
           k_expr="test_javascript_runtime_executes_when_enabled or test_async_javascript_runtime_executes_when_enabled or test_async_javascript_runtime_exec_timeout_leaves_async_session_usable or test_async_packaged_runtime_fetch_hook_round_trips_through_javascript or test_async_packaged_runtime_matches_downstream_javascript_bootstrap_scenario or test_async_packaged_runtime_matches_downstream_fetch_logger_and_coverage_scenario"
-          COLUMNS=150 uv run --no-sync pytest -q tests/contracts/test_optional_runtimes.py -k "$k_expr" > js-runtime-compat.log 2>&1
-          status=$?
-          cat js-runtime-compat.log
-
-          if [[ "${{ matrix.node-version }}" == "20" ]]; then
-            [[ $status -ne 0 ]]
-            grep -F "The requested module 'node:module'" js-runtime-compat.log
-          else
-            [[ $status -eq 0 ]]
-          fi
+          COLUMNS=150 uv run --no-sync pytest -q tests/contracts/test_optional_runtimes.py -k "$k_expr"
 
   bundled-runtime-packaging:
     name: bundled-runtime wheel / ${{ matrix.os }}
