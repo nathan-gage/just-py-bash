@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 from pathlib import Path
@@ -106,6 +107,80 @@ def test_javascript_runtime_executes_when_enabled(
     assert result.exit_code == 0
     assert result.stdout == "bootstrapped:5\n"
     assert result.stderr == ""
+
+
+def test_async_javascript_runtime_executes_when_enabled(
+    monkeypatch: MonkeyPatch,
+    packaged_runtime_artifacts: tuple[str, str],
+) -> None:
+    use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
+    api = public_api()
+    AsyncBash = api.AsyncBash
+    JavaScriptConfig = api.JavaScriptConfig
+
+    async def exercise() -> None:
+        async with AsyncBash(javascript=JavaScriptConfig(bootstrap="globalThis.prefix = 'bootstrapped';")) as bash:
+            result = await bash.exec("js-exec -c 'console.log(globalThis.prefix + \":\" + (2 + 3))'", timeout=60)
+
+        assert result.exit_code == 0
+        assert result.stdout == "bootstrapped:5\n"
+        assert result.stderr == ""
+
+    asyncio.run(exercise())
+
+
+def test_async_javascript_runtime_exec_timeout_interrupts_execution(
+    monkeypatch: MonkeyPatch,
+    packaged_runtime_artifacts: tuple[str, str],
+) -> None:
+    use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
+    AsyncBash = public_api().AsyncBash
+
+    async def exercise() -> None:
+        async with AsyncBash(javascript=True) as bash:
+            result = await bash.exec("js-exec -c 'while(true){}'", timeout=0.01)
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert "interrupted" in result.stderr
+
+    asyncio.run(exercise())
+
+
+def test_async_packaged_runtime_fetch_hook_round_trips_through_javascript(
+    monkeypatch: MonkeyPatch,
+    packaged_runtime_artifacts: tuple[str, str],
+) -> None:
+    use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
+    api = public_api()
+    AsyncBash = api.AsyncBash
+    FetchResult = api.FetchResult
+
+    async def exercise() -> None:
+        fetch_requests: list[tuple[str, str]] = []
+
+        async def fetch(request: Any) -> object:
+            fetch_requests.append((request.method, request.url))
+            return FetchResult(
+                status=200,
+                status_text="OK",
+                headers={"content-type": "text/plain"},
+                body="hooked fetch",
+                url=request.url,
+            )
+
+        async with AsyncBash(javascript=True, fetch=fetch) as bash:
+            result = await bash.exec(
+                'js-exec -c "fetch(\'https://example.com\').then(r=>r.text()).then(t=>console.log(t))"',
+                timeout=60,
+            )
+
+        assert result.exit_code == 0
+        assert result.stdout == "hooked fetch\n"
+        assert result.stderr == ""
+        assert fetch_requests == [("GET", "https://example.com")]
+
+    asyncio.run(exercise())
 
 
 def test_packaged_runtime_option_hooks_work_with_coverage_enabled(
