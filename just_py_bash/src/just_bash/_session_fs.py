@@ -262,14 +262,12 @@ def _coerce_dirent_list(payload: Any) -> list[DirentEntry]:
             raise BridgeError(f"Expected a directory entry mapping, got: {entry!r}")
         mapping = cast(Mapping[str, object], entry)
         dirents.append(
-            DirentEntry.from_wire(
-                {
-                    "name": str(mapping.get("name", "")),
-                    "isFile": bool(mapping.get("isFile")),
-                    "isDirectory": bool(mapping.get("isDirectory")),
-                    "isSymbolicLink": bool(mapping.get("isSymbolicLink")),
-                }
-            )
+            DirentEntry.from_wire({
+                "name": str(mapping.get("name", "")),
+                "isFile": bool(mapping.get("isFile")),
+                "isDirectory": bool(mapping.get("isDirectory")),
+                "isSymbolicLink": bool(mapping.get("isSymbolicLink")),
+            })
         )
     return dirents
 
