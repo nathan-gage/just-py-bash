@@ -171,7 +171,7 @@ def test_async_packaged_runtime_fetch_hook_round_trips_through_javascript(
 
         async with AsyncBash(javascript=True, fetch=fetch) as bash:
             result = await bash.exec(
-                'js-exec -c "fetch(\'https://example.com\').then(r=>r.text()).then(t=>console.log(t))"',
+                "js-exec -c \"fetch('https://example.com').then(r=>r.text()).then(t=>console.log(t))\"",
                 timeout=60,
             )
 
