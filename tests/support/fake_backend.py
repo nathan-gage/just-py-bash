@@ -4,7 +4,13 @@ import textwrap
 from pathlib import Path
 from typing import Literal
 
-FakeBackendMode = Literal["crash_on_exec", "hang_on_exec", "malformed_exec", "defense_violation_event"]
+FakeBackendMode = Literal[
+    "crash_on_exec",
+    "hang_on_exec",
+    "hang_on_first_exec",
+    "malformed_exec",
+    "defense_violation_event",
+]
 
 
 def write_fake_backend(path: Path, *, mode: FakeBackendMode) -> None:
@@ -16,7 +22,9 @@ def write_fake_backend(path: Path, *, mode: FakeBackendMode) -> None:
             import json
             import sys
             import time
+            from pathlib import Path
 
+            MARKER = Path(__file__).with_suffix('.first-exec.marker')
             MODE = {mode!r}
 
 
@@ -43,6 +51,25 @@ def write_fake_backend(path: Path, *, mode: FakeBackendMode) -> None:
 
                 if MODE == "hang_on_exec" and op == "exec":
                     time.sleep(60)
+                    continue
+
+                if MODE == "hang_on_first_exec" and op == "exec":
+                    if not MARKER.exists():
+                        MARKER.write_text("hung-once\\n", encoding="utf-8")
+                        time.sleep(60)
+                        continue
+                    write_message(
+                        {{
+                            "id": request["id"],
+                            "ok": True,
+                            "result": {{
+                                "stdout": "recovered\\n",
+                                "stderr": "",
+                                "exitCode": 0,
+                                "env": {{}},
+                            }},
+                        }}
+                    )
                     continue
 
                 if MODE == "defense_violation_event" and op == "exec":

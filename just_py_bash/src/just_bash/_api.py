@@ -6,6 +6,7 @@ from typing import Self, cast
 
 from ._bridge import NodeBridge
 from ._custom_commands import CustomCommands
+from ._exceptions import BridgeTimeoutError
 from ._fs import FileSystemConfig, InitialFileValue
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._option_hooks import BashLogger, DefenseInDepthConfig, FeatureCoverageWriter, FetchCallback, TraceCallback
@@ -99,6 +100,10 @@ class Bash:
         js_entry: str | os.PathLike[str] | None,
         package_json: str | os.PathLike[str] | None,
     ) -> None:
+        self._options = options
+        self._node_command = tuple(str(part) for part in node_command) if node_command is not None else None
+        self._js_entry = js_entry
+        self._package_json = package_json
         init_options, hooks = options.to_bridge_init()
         self._bridge = NodeBridge(
             init_options=init_options,
@@ -109,9 +114,9 @@ class Bash:
             trace_callback=hooks.trace_callback,
             coverage_writer=hooks.coverage_writer,
             defense_violation_callback=hooks.defense_violation_callback,
-            node_command=node_command,
-            js_entry=js_entry,
-            package_json=package_json,
+            node_command=self._node_command,
+            js_entry=self._js_entry,
+            package_json=self._package_json,
         )
         self.fs = SessionFs(self._bridge)
 
@@ -157,14 +162,25 @@ class Bash:
         )
 
     def exec_with_options(self, command_line: str, options: ExecOptions) -> ExecResult:
-        payload = self._bridge.request(
-            "exec",
-            {
-                "script": command_line,
-                "options": options.to_wire(),
-            },
-            timeout=None if options.timeout is None else options.timeout + 5.0,
-        )
+        try:
+            payload = self._bridge.request(
+                "exec",
+                {
+                    "script": command_line,
+                    "options": options.to_wire(),
+                },
+                timeout=None if options.timeout is None else options.timeout + 5.0,
+            )
+        except BridgeTimeoutError:
+            if options.timeout is None:
+                raise
+            self._open_bridge(
+                self._options,
+                node_command=self._node_command,
+                js_entry=self._js_entry,
+                package_json=self._package_json,
+            )
+            return _timed_out_exec_result(options.timeout)
         return ExecResult.from_wire(payload)
 
     def register_transform_plugin(self, plugin: TransformPlugin) -> None:
@@ -198,3 +214,13 @@ class Bash:
     @property
     def closed(self) -> bool:
         return self._bridge.closed
+
+
+def _timed_out_exec_result(timeout: float) -> ExecResult:
+    timeout_ms = max(1, int(timeout * 1000))
+    return ExecResult(
+        stdout="",
+        stderr=f"bash: execution timeout exceeded after {timeout_ms}ms; session was reset\n",
+        exit_code=124,
+        metadata={"timed_out": True, "timeout_ms": timeout_ms, "session_reset": True},
+    )

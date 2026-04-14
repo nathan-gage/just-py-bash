@@ -129,7 +129,7 @@ def test_async_javascript_runtime_executes_when_enabled(
     asyncio.run(exercise())
 
 
-def test_async_javascript_runtime_exec_timeout_interrupts_execution(
+def test_async_javascript_runtime_exec_timeout_leaves_async_session_usable(
     monkeypatch: MonkeyPatch,
     packaged_runtime_artifacts: tuple[str, str],
 ) -> None:
@@ -137,12 +137,20 @@ def test_async_javascript_runtime_exec_timeout_interrupts_execution(
     AsyncBash = public_api().AsyncBash
 
     async def exercise() -> None:
-        async with AsyncBash(javascript=True) as bash:
+        async with AsyncBash(files={"/workspace/seed.txt": "seed\n"}, cwd="/workspace", javascript=True) as bash:
             result = await bash.exec("js-exec -c 'while(true){}'", timeout=0.01)
+            follow_up = await bash.exec("cat seed.txt", timeout=60)
 
-        assert result.exit_code == 1
         assert result.stdout == ""
-        assert "interrupted" in result.stderr
+        if result.exit_code == 124:
+            assert "execution timeout exceeded" in result.stderr
+            assert "session was reset" in result.stderr
+            assert result.metadata == {"timed_out": True, "timeout_ms": 10, "session_reset": True}
+        else:
+            assert result.exit_code == 1
+            assert "interrupted" in result.stderr
+        assert follow_up.stdout == "seed\n"
+        assert follow_up.stderr == ""
 
     asyncio.run(exercise())
 

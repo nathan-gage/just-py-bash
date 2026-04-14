@@ -8,7 +8,7 @@ from typing import Self, cast
 from ._async_bridge import AsyncNodeBridge
 from ._bridge_protocol import BridgeOperation
 from ._custom_commands import AsyncCustomCommands
-from ._exceptions import BridgeError
+from ._exceptions import BridgeError, BridgeTimeoutError
 from ._fs import FileSystemConfig, InitialFileValue
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._option_hooks import BashLogger, DefenseInDepthConfig, FeatureCoverageWriter, FetchCallback, TraceCallback
@@ -195,14 +195,21 @@ class AsyncBash:
     async def exec_with_options(self, command_line: str, options: ExecOptions) -> ExecResult:
         async with self._lock():
             bridge = await self._ensure_bridge_open_locked()
-            payload = await bridge.request(
-                "exec",
-                {
-                    "script": command_line,
-                    "options": options.to_wire(),
-                },
-                timeout=None if options.timeout is None else options.timeout + 5.0,
-            )
+            try:
+                payload = await bridge.request(
+                    "exec",
+                    {
+                        "script": command_line,
+                        "options": options.to_wire(),
+                    },
+                    timeout=None if options.timeout is None else options.timeout + 5.0,
+                )
+            except BridgeTimeoutError:
+                if options.timeout is None:
+                    raise
+                if self._bridge is bridge:
+                    self._bridge = None
+                return _timed_out_exec_result(options.timeout)
         return ExecResult.from_wire(payload)
 
     async def register_transform_plugin(self, plugin: TransformPlugin) -> None:
@@ -240,3 +247,13 @@ class AsyncBash:
         async with self._lock():
             bridge = await self._ensure_bridge_open_locked()
             return await bridge.request("get_cwd")
+
+
+def _timed_out_exec_result(timeout: float) -> ExecResult:
+    timeout_ms = max(1, int(timeout * 1000))
+    return ExecResult(
+        stdout="",
+        stderr=f"bash: execution timeout exceeded after {timeout_ms}ms; session was reset\n",
+        exit_code=124,
+        metadata={"timed_out": True, "timeout_ms": timeout_ms, "session_reset": True},
+    )

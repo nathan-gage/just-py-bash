@@ -60,14 +60,35 @@ def test_bash_raises_bridge_error_on_malformed_worker_response(tmp_path: Path) -
             bash.exec("printf malformed")
 
 
-def test_bash_raises_bridge_timeout_when_worker_stops_responding(tmp_path: Path) -> None:
+def test_bash_returns_timeout_result_when_worker_stops_responding(tmp_path: Path) -> None:
     api = public_api()
     worker = tmp_path / "hanging-worker.py"
     write_fake_backend(worker, mode="hang_on_exec")
 
     with api.Bash(node_command=fake_node_command(worker)) as bash:
-        with pytest.raises(api.BridgeTimeoutError, match="Timed out waiting for just-bash worker response"):
-            bash.exec("printf slow", timeout=0.0)
+        result = bash.exec("printf slow", timeout=0.0)
+
+    assert result.exit_code == 124
+    assert result.stdout == ""
+    assert result.stderr == "bash: execution timeout exceeded after 1ms; session was reset\n"
+    assert result.metadata == {"timed_out": True, "timeout_ms": 1, "session_reset": True}
+
+
+def test_bash_returns_timeout_result_and_recovers_after_exec_timeout(tmp_path: Path) -> None:
+    api = public_api()
+    worker = tmp_path / "timeout-worker.py"
+    write_fake_backend(worker, mode="hang_on_first_exec")
+
+    with api.Bash(node_command=fake_node_command(worker)) as bash:
+        timeout_result = bash.exec("printf slow", timeout=0.0)
+        recovered_result = bash.exec("printf ok")
+
+    assert timeout_result.exit_code == 124
+    assert timeout_result.stdout == ""
+    assert timeout_result.stderr == "bash: execution timeout exceeded after 1ms; session was reset\n"
+    assert timeout_result.metadata == {"timed_out": True, "timeout_ms": 1, "session_reset": True}
+    assert recovered_result.stdout == "recovered\n"
+    assert recovered_result.stderr == ""
 
 
 def test_bash_can_close_cleanly_after_worker_crash(tmp_path: Path) -> None:
@@ -123,6 +144,26 @@ def test_async_bash_raises_bridge_error_on_malformed_worker_response(tmp_path: P
         async with api.AsyncBash(node_command=fake_node_command(worker)) as bash:
             with pytest.raises(api.BridgeError, match="Failed to decode just-bash worker response"):
                 await bash.exec("printf malformed")
+
+    asyncio.run(exercise())
+
+
+def test_async_bash_returns_timeout_result_and_recovers_after_exec_timeout(tmp_path: Path) -> None:
+    api = public_api()
+    worker = tmp_path / "async-timeout-worker.py"
+    write_fake_backend(worker, mode="hang_on_first_exec")
+
+    async def exercise() -> None:
+        async with api.AsyncBash(node_command=fake_node_command(worker)) as bash:
+            timeout_result = await bash.exec("printf slow", timeout=0.0)
+            recovered_result = await bash.exec("printf ok")
+
+        assert timeout_result.exit_code == 124
+        assert timeout_result.stdout == ""
+        assert timeout_result.stderr == "bash: execution timeout exceeded after 1ms; session was reset\n"
+        assert timeout_result.metadata == {"timed_out": True, "timeout_ms": 1, "session_reset": True}
+        assert recovered_result.stdout == "recovered\n"
+        assert recovered_result.stderr == ""
 
     asyncio.run(exercise())
 
