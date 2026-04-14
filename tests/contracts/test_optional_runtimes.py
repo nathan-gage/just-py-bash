@@ -4,12 +4,15 @@ import asyncio
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from pytest import MonkeyPatch
 
 from tests.support.harness import ROOT, public_api
+
+if TYPE_CHECKING:
+    from just_bash import UnsupportedRuntimeConfigurationError
 
 pytestmark = [pytest.mark.contract, pytest.mark.xdist_group(name="runtime_contracts")]
 
@@ -60,11 +63,12 @@ def use_packaged_runtime(monkeypatch: MonkeyPatch, packaged_runtime_artifacts: t
 def assert_unsupported_javascript_runtime(error: Exception) -> None:
     api = public_api()
     assert isinstance(error, api.UnsupportedRuntimeConfigurationError)
-    assert error.feature == "javascript"
-    assert error.required_version == "22.6.0"
-    assert error.actual_version is not None
-    assert "just-py-bash[node]" in str(error)
-    assert "node:module.stripTypeScriptTypes" in str(error)
+    typed_error = cast("UnsupportedRuntimeConfigurationError", error)
+    assert typed_error.feature == "javascript"
+    assert typed_error.required_version == "22.6.0"
+    assert typed_error.actual_version is not None
+    assert "just-py-bash[node]" in str(typed_error)
+    assert "node:module.stripTypeScriptTypes" in str(typed_error)
 
 
 def test_python_runtime_executes_when_enabled(
