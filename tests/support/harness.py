@@ -227,6 +227,19 @@ def normalize_fs_stat(result: Any) -> dict[str, Any]:
     }
 
 
+def normalize_dirent_entry(result: Any) -> dict[str, Any]:
+    return {
+        "name": str(result.name),
+        "isFile": bool(result.is_file),
+        "isDirectory": bool(result.is_directory),
+        "isSymbolicLink": bool(result.is_symbolic_link),
+    }
+
+
+def normalize_dirent_entries(results: Sequence[Any]) -> list[dict[str, Any]]:
+    return [normalize_dirent_entry(result) for result in results]
+
+
 def normalize_operation_error(error: BaseException) -> dict[str, Any]:
     error_type = getattr(error, "error_type", None)
     if not isinstance(error_type, str) or not error_type:
@@ -533,9 +546,9 @@ def to_reference_operation(operation: Mapping[str, Any]) -> dict[str, Any]:
             payload["options"] = to_reference_exec_options(operation["kwargs"])
         return payload
 
-    if op == "write_bytes":
+    if op in {"write_bytes", "append_bytes"}:
         return {
-            "op": "write_bytes",
+            "op": op,
             "path": operation["path"],
             "content": encode_file_value(operation["content"]),
         }
@@ -909,12 +922,24 @@ def op_write_bytes(path: str, content: bytes) -> dict[str, Any]:
     return {"op": "write_bytes", "path": path, "content": content}
 
 
+def op_append_text(path: str, content: str) -> dict[str, Any]:
+    return {"op": "append_text", "path": path, "content": content}
+
+
+def op_append_bytes(path: str, content: bytes) -> dict[str, Any]:
+    return {"op": "append_bytes", "path": path, "content": content}
+
+
 def op_exists(path: str) -> dict[str, Any]:
     return {"op": "exists", "path": path}
 
 
 def op_stat(path: str) -> dict[str, Any]:
     return {"op": "stat", "path": path}
+
+
+def op_lstat(path: str) -> dict[str, Any]:
+    return {"op": "lstat", "path": path}
 
 
 def op_mkdir(path: str, *, recursive: bool = False) -> dict[str, Any]:
@@ -926,6 +951,10 @@ def op_mkdir(path: str, *, recursive: bool = False) -> dict[str, Any]:
 
 def op_readdir(path: str) -> dict[str, Any]:
     return {"op": "readdir", "path": path}
+
+
+def op_readdir_with_file_types(path: str) -> dict[str, Any]:
+    return {"op": "readdir_with_file_types", "path": path}
 
 
 def op_rm(path: str, *, recursive: bool = False, force: bool = False) -> dict[str, Any]:
@@ -948,8 +977,27 @@ def op_mv(src: str, dest: str) -> dict[str, Any]:
     return {"op": "mv", "src": src, "dest": dest}
 
 
+def op_resolve_path(path: str, *, base: str | None = None) -> dict[str, Any]:
+    operation: dict[str, Any] = {"op": "resolve_path", "path": path}
+    if base is not None:
+        operation["base"] = base
+    return operation
+
+
+def op_get_all_paths() -> dict[str, Any]:
+    return {"op": "get_all_paths"}
+
+
 def op_chmod(path: str, mode: int) -> dict[str, Any]:
     return {"op": "chmod", "path": path, "mode": mode}
+
+
+def op_symlink(target: str, link_path: str) -> dict[str, Any]:
+    return {"op": "symlink", "target": target, "linkPath": link_path}
+
+
+def op_link(existing_path: str, new_path: str) -> dict[str, Any]:
+    return {"op": "link", "existingPath": existing_path, "newPath": new_path}
 
 
 def op_readlink(path: str) -> dict[str, Any]:
@@ -958,6 +1006,17 @@ def op_readlink(path: str) -> dict[str, Any]:
 
 def op_realpath(path: str) -> dict[str, Any]:
     return {"op": "realpath", "path": path}
+
+
+def op_utimes(path: str, atime: datetime, mtime: datetime) -> dict[str, Any]:
+    normalized_atime = atime if atime.tzinfo is not None else atime.replace(tzinfo=UTC)
+    normalized_mtime = mtime if mtime.tzinfo is not None else mtime.replace(tzinfo=UTC)
+    return {
+        "op": "utimes",
+        "path": path,
+        "atimeMs": int(normalized_atime.astimezone(UTC).timestamp() * 1000),
+        "mtimeMs": int(normalized_mtime.astimezone(UTC).timestamp() * 1000),
+    }
 
 
 def op_get_env() -> dict[str, Any]:
@@ -996,15 +1055,27 @@ def run_python_scenario(
                 elif op == "write_bytes":
                     bash.write_bytes(operation["path"], operation["content"])
                     results.append(wrap_success(None))
+                elif op == "append_text":
+                    bash.fs.append_text(operation["path"], operation["content"])
+                    results.append(wrap_success(None))
+                elif op == "append_bytes":
+                    bash.fs.append_bytes(operation["path"], operation["content"])
+                    results.append(wrap_success(None))
                 elif op == "exists":
                     results.append(wrap_success(bash.fs.exists(operation["path"])))
                 elif op == "stat":
                     results.append(wrap_success(normalize_fs_stat(bash.fs.stat(operation["path"]))))
+                elif op == "lstat":
+                    results.append(wrap_success(normalize_fs_stat(bash.fs.lstat(operation["path"]))))
                 elif op == "mkdir":
                     bash.fs.mkdir(operation["path"], recursive=bool(operation.get("recursive", False)))
                     results.append(wrap_success(None))
                 elif op == "readdir":
                     results.append(wrap_success(bash.fs.readdir(operation["path"])))
+                elif op == "readdir_with_file_types":
+                    results.append(
+                        wrap_success(normalize_dirent_entries(bash.fs.readdir_with_file_types(operation["path"])))
+                    )
                 elif op == "rm":
                     bash.fs.rm(
                         operation["path"],
@@ -1022,13 +1093,34 @@ def run_python_scenario(
                 elif op == "mv":
                     bash.fs.mv(operation["src"], operation["dest"])
                     results.append(wrap_success(None))
+                elif op == "resolve_path":
+                    results.append(
+                        wrap_success(
+                            bash.fs.resolve_path(operation["path"], base=cast(str | None, operation.get("base")))
+                        )
+                    )
+                elif op == "get_all_paths":
+                    results.append(wrap_success(bash.fs.get_all_paths()))
                 elif op == "chmod":
                     bash.fs.chmod(operation["path"], int(operation["mode"]))
+                    results.append(wrap_success(None))
+                elif op == "symlink":
+                    bash.fs.symlink(operation["target"], operation["linkPath"])
+                    results.append(wrap_success(None))
+                elif op == "link":
+                    bash.fs.link(operation["existingPath"], operation["newPath"])
                     results.append(wrap_success(None))
                 elif op == "readlink":
                     results.append(wrap_success(bash.fs.readlink(operation["path"])))
                 elif op == "realpath":
                     results.append(wrap_success(bash.fs.realpath(operation["path"])))
+                elif op == "utimes":
+                    bash.fs.utimes(
+                        operation["path"],
+                        datetime.fromtimestamp(int(operation["atimeMs"]) / 1000, tz=UTC),
+                        datetime.fromtimestamp(int(operation["mtimeMs"]) / 1000, tz=UTC),
+                    )
+                    results.append(wrap_success(None))
                 elif op == "get_env":
                     results.append(wrap_success(bash.get_env()))
                 elif op == "get_cwd":
@@ -1073,10 +1165,18 @@ def run_async_python_scenario(
                     elif op == "write_bytes":
                         await bash.write_bytes(operation["path"], operation["content"])
                         results.append(wrap_success(None))
+                    elif op == "append_text":
+                        await bash.fs.append_text(operation["path"], operation["content"])
+                        results.append(wrap_success(None))
+                    elif op == "append_bytes":
+                        await bash.fs.append_bytes(operation["path"], operation["content"])
+                        results.append(wrap_success(None))
                     elif op == "exists":
                         results.append(wrap_success(await bash.fs.exists(operation["path"])))
                     elif op == "stat":
                         results.append(wrap_success(normalize_fs_stat(await bash.fs.stat(operation["path"]))))
+                    elif op == "lstat":
+                        results.append(wrap_success(normalize_fs_stat(await bash.fs.lstat(operation["path"]))))
                     elif op == "mkdir":
                         await bash.fs.mkdir(
                             operation["path"],
@@ -1085,6 +1185,12 @@ def run_async_python_scenario(
                         results.append(wrap_success(None))
                     elif op == "readdir":
                         results.append(wrap_success(await bash.fs.readdir(operation["path"])))
+                    elif op == "readdir_with_file_types":
+                        results.append(
+                            wrap_success(
+                                normalize_dirent_entries(await bash.fs.readdir_with_file_types(operation["path"]))
+                            )
+                        )
                     elif op == "rm":
                         await bash.fs.rm(
                             operation["path"],
@@ -1102,13 +1208,36 @@ def run_async_python_scenario(
                     elif op == "mv":
                         await bash.fs.mv(operation["src"], operation["dest"])
                         results.append(wrap_success(None))
+                    elif op == "resolve_path":
+                        results.append(
+                            wrap_success(
+                                await bash.fs.resolve_path(
+                                    operation["path"], base=cast(str | None, operation.get("base"))
+                                )
+                            )
+                        )
+                    elif op == "get_all_paths":
+                        results.append(wrap_success(await bash.fs.get_all_paths()))
                     elif op == "chmod":
                         await bash.fs.chmod(operation["path"], int(operation["mode"]))
+                        results.append(wrap_success(None))
+                    elif op == "symlink":
+                        await bash.fs.symlink(operation["target"], operation["linkPath"])
+                        results.append(wrap_success(None))
+                    elif op == "link":
+                        await bash.fs.link(operation["existingPath"], operation["newPath"])
                         results.append(wrap_success(None))
                     elif op == "readlink":
                         results.append(wrap_success(await bash.fs.readlink(operation["path"])))
                     elif op == "realpath":
                         results.append(wrap_success(await bash.fs.realpath(operation["path"])))
+                    elif op == "utimes":
+                        await bash.fs.utimes(
+                            operation["path"],
+                            datetime.fromtimestamp(int(operation["atimeMs"]) / 1000, tz=UTC),
+                            datetime.fromtimestamp(int(operation["mtimeMs"]) / 1000, tz=UTC),
+                        )
+                        results.append(wrap_success(None))
                     elif op == "get_env":
                         results.append(wrap_success(await bash.get_env()))
                     elif op == "get_cwd":
@@ -1188,25 +1317,36 @@ __all__ = [
     "decode_bytes_payload",
     "encode_file_value",
     "infer_package_json_from_js_entry",
+    "normalize_dirent_entries",
+    "normalize_dirent_entry",
     "normalize_exec_result",
     "normalize_fs_stat",
     "normalize_operation_error",
+    "op_append_bytes",
+    "op_append_text",
     "op_chmod",
     "op_cp",
     "op_exec",
     "op_exists",
+    "op_get_all_paths",
     "op_get_cwd",
     "op_get_env",
+    "op_link",
+    "op_lstat",
     "op_probe_defense_violation",
     "op_mkdir",
     "op_mv",
     "op_readdir",
+    "op_readdir_with_file_types",
     "op_read_bytes",
     "op_read_text",
     "op_readlink",
     "op_realpath",
+    "op_resolve_path",
     "op_rm",
     "op_stat",
+    "op_symlink",
+    "op_utimes",
     "op_write_bytes",
     "op_write_text",
     "public_api",

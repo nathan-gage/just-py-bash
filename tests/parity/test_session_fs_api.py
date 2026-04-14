@@ -11,18 +11,29 @@ import pytest
 
 from tests.support.harness import (
     BackendArtifacts,
+    op_append_bytes,
+    op_append_text,
     op_chmod,
     op_cp,
     op_exec,
     op_exists,
+    op_get_all_paths,
+    op_link,
+    op_lstat,
     op_mkdir,
     op_mv,
+    op_read_bytes,
     op_read_text,
     op_readdir,
+    op_readdir_with_file_types,
     op_readlink,
     op_realpath,
+    op_resolve_path,
     op_rm,
     op_stat,
+    op_symlink,
+    op_utimes,
+    op_write_bytes,
     op_write_text,
     public_api,
     run_async_differential_scenario,
@@ -164,6 +175,69 @@ def test_session_fs_symlink_operations_match_upstream(
     assert python_result["results"][2]["value"] == "target.txt"
     assert python_result["results"][3]["value"] == "/workspace/target.txt"
     assert python_result["results"][4]["value"]["isFile"] is True
+
+
+@pytest.mark.parametrize(
+    "runner",
+    [run_differential_scenario, run_async_differential_scenario],
+    ids=["sync", "async"],
+)
+def test_session_fs_extended_operations_match_upstream(
+    backend_artifacts: BackendArtifacts,
+    runner: ScenarioRunner,
+) -> None:
+    updated_mtime = datetime(2024, 7, 8, 9, 10, 11, tzinfo=UTC)
+    operations = [
+        op_mkdir("docs"),
+        op_write_text("docs/guide.txt", "guide\n"),
+        op_append_text("docs/guide.txt", "more\n"),
+        op_read_text("docs/guide.txt"),
+        op_write_bytes("data.bin", b"ab"),
+        op_append_bytes("data.bin", b"cd"),
+        op_read_bytes("data.bin"),
+        op_symlink("docs/guide.txt", "guide-link.txt"),
+        op_link("docs/guide.txt", "guide-hardlink.txt"),
+        op_lstat("guide-link.txt"),
+        op_readlink("guide-link.txt"),
+        op_realpath("guide-link.txt"),
+        op_readdir_with_file_types("."),
+        op_resolve_path("../guide-link.txt", base="docs"),
+        op_get_all_paths(),
+        op_utimes("docs/guide.txt", updated_mtime, updated_mtime),
+        op_stat("docs/guide.txt"),
+        op_read_text("guide-hardlink.txt"),
+    ]
+
+    python_result, reference_result = runner(
+        init_kwargs={"cwd": "/workspace"},
+        operations=operations,
+        backend_artifacts=backend_artifacts,
+    )
+
+    assert _without_mtime(python_result, stat_indices={9}) == _without_mtime(
+        reference_result,
+        stat_indices={9},
+    )
+    assert python_result["results"][3]["value"] == "guide\nmore\n"
+    assert python_result["results"][6]["value"] == {"__just_bash_bytes__": "YWJjZA=="}
+    assert python_result["results"][9]["value"]["isSymbolicLink"] is True
+    assert python_result["results"][10]["value"] == "docs/guide.txt"
+    assert python_result["results"][11]["value"] == "/workspace/docs/guide.txt"
+
+    listing_by_name = {
+        entry["name"]: entry for entry in cast(list[dict[str, Any]], python_result["results"][12]["value"])
+    }
+    assert listing_by_name["docs"]["isDirectory"] is True
+    assert listing_by_name["guide-link.txt"]["isSymbolicLink"] is True
+    assert listing_by_name["guide-hardlink.txt"]["isFile"] is True
+    assert python_result["results"][13]["value"] == "/workspace/guide-link.txt"
+    assert {
+        "/workspace/docs/guide.txt",
+        "/workspace/guide-link.txt",
+        "/workspace/guide-hardlink.txt",
+    } <= set(cast(list[str], python_result["results"][14]["value"]))
+    assert python_result["results"][16]["value"]["mtimeMs"] == int(updated_mtime.timestamp() * 1000)
+    assert python_result["results"][17]["value"] == "guide\nmore\n"
 
 
 @pytest.mark.parametrize(

@@ -298,16 +298,25 @@ Available methods:
 - `read_bytes(path)`
 - `write_text(path, content)`
 - `write_bytes(path, content)`
+- `append_text(path, content)`
+- `append_bytes(path, content)`
 - `exists(path)`
 - `stat(path)` → `FsStat`
+- `lstat(path)` → `FsStat`
 - `mkdir(path, recursive=False)`
 - `readdir(path)`
+- `readdir_with_file_types(path)` → `list[DirentEntry]`
 - `rm(path, recursive=False, force=False)`
 - `cp(src, dest, recursive=False)`
 - `mv(src, dest)`
+- `resolve_path(path, *, base=None)`
+- `get_all_paths()`
 - `chmod(path, mode)`
+- `symlink(target, link_path)`
+- `link(existing_path, new_path)`
 - `readlink(path)`
 - `realpath(path)`
+- `utimes(path, atime, mtime)`
 
 Paths are resolved with upstream `just-bash` session semantics, so relative paths are interpreted against the session cwd.
 
@@ -541,7 +550,7 @@ The repo includes a Python `examples/` directory that mirrors the spirit of the 
 | `examples/custom_commands_sync.py` | A Python port of the upstream custom-command showcase |
 | `examples/custom_commands_async.py` | Async custom commands with nested async exec |
 | `examples/configuration_and_runtimes.py` | Session config, per-exec overrides, `replace_env`, Python, and JavaScript runtimes |
-| `examples/filesystem_surfaces.py` | `FileInit`, `LazyFile`, `FsStat`, and the session-bound filesystem API |
+| `examples/filesystem_surfaces.py` | `FileInit`, `LazyFile`, `FsStat`, `DirentEntry`, and the session-bound filesystem API |
 | `examples/network_access.py` | Allow-listed network access, method policy, and header transforms via a local HTTP fixture |
 | `examples/option_hooks.py` | Python callback surfaces for `fetch`, `logger`, `trace`, `coverage`, and `defense_in_depth` |
 | `examples/parser_and_command_registry.py` | Command-name helpers plus standalone `parse(...)` / `serialize(...)` |
@@ -616,7 +625,7 @@ just-py-bash-shell --cwd /
 
 The wrapper now covers the main upstream session API, filesystem config and session-fs surfaces, option hooks, command-name helpers, standalone parser/serializer helpers, the built-in transform pipeline/plugin surfaces (`BashTransformPipeline`, `CommandCollectorPlugin`, `TeePlugin`), upstream-style sandbox/security helper utilities, and thin CLI delegation via `just-py-bash` / `just-py-bash-shell`.
 
-What it still does **not** expose is the full low-level TypeScript filesystem surface or live Python filesystem adapter interfaces from the TypeScript package. The Python wrapper currently covers the session-facing filesystem methods (`exists`, `stat`, `mkdir`, `readdir`, `rm`, `cp`, `mv`, `chmod`, `readlink`, `realpath`, plus the text/bytes helpers), but not the remaining lower-level pieces like `lstat`, `symlink`, `link`, `utimes`, or `readdirWithFileTypes`. If you need those full lower-level primitives directly, use upstream `just-bash` from TypeScript. If you want the Pythonic session-oriented shell API plus the portable parser / transform / sandbox / security helper surfaces described above, use `just-py-bash`.
+What it still does **not** expose is the live TypeScript-side filesystem adapter interface for plugging arbitrary Python filesystem implementations directly into upstream `just-bash`. What it now does expose is the full vendored session-facing filesystem surface on `bash.fs` / `async_bash.fs`, including `append_text` / `append_bytes`, `lstat`, `readdir_with_file_types`, `resolve_path`, `get_all_paths`, `symlink`, `link`, and `utimes`, alongside the existing text/bytes helpers and core session operations. If you need to implement a new low-level filesystem backend in TypeScript, use upstream `just-bash`. If you want the Pythonic session-oriented shell API plus the portable parser / transform / sandbox / security helper surfaces described above, use `just-py-bash`.
 
 ## Contributing
 

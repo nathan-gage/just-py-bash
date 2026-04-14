@@ -45,6 +45,47 @@ def test_bash_fs_proxy_supports_core_session_operations() -> None:
         assert bash.fs.exists("docs/guide.txt") is False
 
 
+def test_bash_fs_proxy_supports_extended_session_operations() -> None:
+    api = public_api()
+    updated_mtime = datetime(2024, 2, 3, 4, 5, 6, tzinfo=UTC)
+
+    with api.Bash(cwd="/workspace") as bash:
+        bash.fs.mkdir("docs")
+        bash.fs.write_text("docs/guide.txt", "guide\n")
+        bash.fs.append_text("docs/guide.txt", "more\n")
+        assert bash.fs.read_text("docs/guide.txt") == "guide\nmore\n"
+
+        bash.fs.write_bytes("data.bin", b"ab")
+        bash.fs.append_bytes("data.bin", b"cd")
+        assert bash.fs.read_bytes("data.bin") == b"abcd"
+
+        bash.fs.symlink("docs/guide.txt", "guide-link.txt")
+        bash.fs.link("docs/guide.txt", "guide-hardlink.txt")
+
+        link_stat = bash.fs.lstat("guide-link.txt")
+        assert link_stat.is_symbolic_link is True
+        assert link_stat.is_file is False
+        assert bash.fs.readlink("guide-link.txt") == "docs/guide.txt"
+        assert bash.fs.realpath("guide-link.txt") == "/workspace/docs/guide.txt"
+
+        typed_listing = {entry.name: entry for entry in bash.fs.readdir_with_file_types(".")}
+        assert isinstance(typed_listing["docs"], api.DirentEntry)
+        assert typed_listing["docs"].is_directory is True
+        assert typed_listing["guide-link.txt"].is_symbolic_link is True
+        assert typed_listing["guide-hardlink.txt"].is_file is True
+
+        assert bash.fs.resolve_path("../guide-link.txt", base="docs") == "/workspace/guide-link.txt"
+        assert {
+            "/workspace/docs/guide.txt",
+            "/workspace/guide-link.txt",
+            "/workspace/guide-hardlink.txt",
+        } <= set(bash.fs.get_all_paths())
+
+        bash.fs.utimes("docs/guide.txt", updated_mtime, updated_mtime)
+        assert bash.fs.stat("docs/guide.txt").mtime == updated_mtime
+        assert bash.fs.read_text("guide-hardlink.txt") == "guide\nmore\n"
+
+
 def test_bash_lazy_file_callback_is_materialized_once() -> None:
     api = public_api()
     calls = 0
@@ -87,6 +128,50 @@ def test_bash_fs_takes_precedence_over_files_init() -> None:
         cwd="/",
     ) as bash:
         assert bash.read_text("note.txt") == "from-fs\n"
+
+
+def test_async_bash_fs_proxy_supports_extended_session_operations() -> None:
+    api = public_api()
+    updated_mtime = datetime(2024, 8, 9, 10, 11, 12, tzinfo=UTC)
+
+    async def exercise() -> None:
+        async with api.AsyncBash(cwd="/workspace") as bash:
+            await bash.fs.mkdir("docs")
+            await bash.fs.write_text("docs/guide.txt", "guide\n")
+            await bash.fs.append_text("docs/guide.txt", "more\n")
+            assert await bash.fs.read_text("docs/guide.txt") == "guide\nmore\n"
+
+            await bash.fs.write_bytes("data.bin", b"ab")
+            await bash.fs.append_bytes("data.bin", b"cd")
+            assert await bash.fs.read_bytes("data.bin") == b"abcd"
+
+            await bash.fs.symlink("docs/guide.txt", "guide-link.txt")
+            await bash.fs.link("docs/guide.txt", "guide-hardlink.txt")
+
+            link_stat = await bash.fs.lstat("guide-link.txt")
+            assert link_stat.is_symbolic_link is True
+            assert link_stat.is_file is False
+            assert await bash.fs.readlink("guide-link.txt") == "docs/guide.txt"
+            assert await bash.fs.realpath("guide-link.txt") == "/workspace/docs/guide.txt"
+
+            typed_listing = {entry.name: entry for entry in await bash.fs.readdir_with_file_types(".")}
+            assert isinstance(typed_listing["docs"], api.DirentEntry)
+            assert typed_listing["docs"].is_directory is True
+            assert typed_listing["guide-link.txt"].is_symbolic_link is True
+            assert typed_listing["guide-hardlink.txt"].is_file is True
+
+            assert await bash.fs.resolve_path("../guide-link.txt", base="docs") == "/workspace/guide-link.txt"
+            assert {
+                "/workspace/docs/guide.txt",
+                "/workspace/guide-link.txt",
+                "/workspace/guide-hardlink.txt",
+            } <= set(await bash.fs.get_all_paths())
+
+            await bash.fs.utimes("docs/guide.txt", updated_mtime, updated_mtime)
+            assert (await bash.fs.stat("docs/guide.txt")).mtime == updated_mtime
+            assert await bash.fs.read_text("guide-hardlink.txt") == "guide\nmore\n"
+
+    asyncio.run(exercise())
 
 
 def test_async_bash_fs_proxy_and_async_lazy_provider_work() -> None:

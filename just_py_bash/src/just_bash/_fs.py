@@ -8,6 +8,7 @@ from typing import TypeAlias
 
 from ._codec import encode_file_value
 from ._types import (
+    DirentEntryWire,
     FileInitWire,
     FileValue,
     FsConfigWire,
@@ -36,6 +37,31 @@ class FileInit:
 @dataclass(slots=True)
 class LazyFile:
     provider: LazyFileSource
+
+
+@dataclass(slots=True, frozen=True)
+class DirentEntry:
+    name: str
+    is_file: bool
+    is_directory: bool
+    is_symbolic_link: bool
+
+    @classmethod
+    def from_wire(cls, payload: DirentEntryWire) -> DirentEntry:
+        return cls(
+            name=str(payload["name"]),
+            is_file=bool(payload["isFile"]),
+            is_directory=bool(payload["isDirectory"]),
+            is_symbolic_link=bool(payload["isSymbolicLink"]),
+        )
+
+    def to_wire(self) -> DirentEntryWire:
+        return {
+            "name": self.name,
+            "isFile": self.is_file,
+            "isDirectory": self.is_directory,
+            "isSymbolicLink": self.is_symbolic_link,
+        }
 
 
 @dataclass(slots=True, frozen=True)
@@ -229,6 +255,7 @@ def _encode_datetime_ms(value: datetime) -> int:
 
 
 __all__ = [
+    "DirentEntry",
     "FileInit",
     "FileSystemConfig",
     "FsStat",

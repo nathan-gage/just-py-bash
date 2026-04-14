@@ -30,7 +30,7 @@ from ._exceptions import (
     JustBashError,
     UnsupportedRuntimeConfigurationError,
 )
-from ._fs import FileInit, FsStat, InMemoryFs, LazyFile, MountableFs, MountConfig, OverlayFs, ReadWriteFs
+from ._fs import DirentEntry, FileInit, FsStat, InMemoryFs, LazyFile, MountableFs, MountConfig, OverlayFs, ReadWriteFs
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
 from ._option_hooks import (
     BashLogger,
@@ -100,6 +100,7 @@ __all__ = [
     "CommandFailedError",
     "DefenseInDepthConfig",
     "DefenseViolationCallback",
+    "DirentEntry",
     "ExecOptions",
     "ExecResult",
     "ExecutionLimits",
