@@ -527,6 +527,15 @@ function normalizeFsStat(stat) {
   };
 }
 
+function normalizeDirentEntry(entry) {
+  return {
+    name: typeof entry?.name === 'string' ? entry.name : '',
+    isFile: Boolean(entry?.isFile),
+    isDirectory: Boolean(entry?.isDirectory),
+    isSymbolicLink: Boolean(entry?.isSymbolicLink),
+  };
+}
+
 function getSandbox(sandboxId) {
   const sandbox = sandboxes.get(sandboxId);
   if (!sandbox) {
@@ -941,6 +950,18 @@ async function handleMessage(message) {
       return null;
     }
 
+    case 'append_text': {
+      ensureInitialized();
+      await bash.fs.appendFile(resolveSessionPath(message.path), message.content);
+      return null;
+    }
+
+    case 'append_bytes': {
+      ensureInitialized();
+      await bash.fs.appendFile(resolveSessionPath(message.path), decodeBytes(message.content));
+      return null;
+    }
+
     case 'exists': {
       ensureInitialized();
       return await bash.fs.exists(resolveSessionPath(message.path));
@@ -949,6 +970,11 @@ async function handleMessage(message) {
     case 'stat': {
       ensureInitialized();
       return normalizeFsStat(await bash.fs.stat(resolveSessionPath(message.path)));
+    }
+
+    case 'lstat': {
+      ensureInitialized();
+      return normalizeFsStat(await bash.fs.lstat(resolveSessionPath(message.path)));
     }
 
     case 'mkdir': {
@@ -962,6 +988,16 @@ async function handleMessage(message) {
     case 'readdir': {
       ensureInitialized();
       return await bash.fs.readdir(resolveSessionPath(message.path));
+    }
+
+    case 'readdir_with_file_types': {
+      ensureInitialized();
+      if (typeof bash.fs.readdirWithFileTypes !== 'function') {
+        throw new Error('readdirWithFileTypes is not available for this session filesystem');
+      }
+      return (await bash.fs.readdirWithFileTypes(resolveSessionPath(message.path))).map(
+        normalizeDirentEntry,
+      );
     }
 
     case 'rm': {
@@ -987,9 +1023,36 @@ async function handleMessage(message) {
       return null;
     }
 
+    case 'resolve_path': {
+      ensureInitialized();
+      const base =
+        typeof message.base === 'string' ? resolveSessionPath(message.base) : bash.getCwd();
+      return bash.fs.resolvePath(base, message.path);
+    }
+
+    case 'get_all_paths': {
+      ensureInitialized();
+      return bash.fs.getAllPaths();
+    }
+
     case 'chmod': {
       ensureInitialized();
       await bash.fs.chmod(resolveSessionPath(message.path), message.mode);
+      return null;
+    }
+
+    case 'symlink': {
+      ensureInitialized();
+      await bash.fs.symlink(message.target, resolveSessionPath(message.linkPath));
+      return null;
+    }
+
+    case 'link': {
+      ensureInitialized();
+      await bash.fs.link(
+        resolveSessionPath(message.existingPath),
+        resolveSessionPath(message.newPath),
+      );
       return null;
     }
 
@@ -1001,6 +1064,16 @@ async function handleMessage(message) {
     case 'realpath': {
       ensureInitialized();
       return await bash.fs.realpath(resolveSessionPath(message.path));
+    }
+
+    case 'utimes': {
+      ensureInitialized();
+      await bash.fs.utimes(
+        resolveSessionPath(message.path),
+        new Date(message.atimeMs),
+        new Date(message.mtimeMs),
+      );
+      return null;
     }
 
     case 'get_env': {

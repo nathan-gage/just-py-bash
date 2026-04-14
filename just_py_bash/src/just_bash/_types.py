@@ -257,6 +257,27 @@ class PathPairRequestPayload(TypedDict):
     dest: str
 
 
+class SymlinkRequestPayload(TypedDict):
+    target: str
+    linkPath: str
+
+
+class LinkRequestPayload(TypedDict):
+    existingPath: str
+    newPath: str
+
+
+class ResolvePathRequestPayload(TypedDict, total=False):
+    path: str
+    base: str
+
+
+class UtimesRequestPayload(TypedDict):
+    path: str
+    atimeMs: int
+    mtimeMs: int
+
+
 class MkdirRequestPayload(TypedDict, total=False):
     path: str
     recursive: bool
@@ -484,6 +505,13 @@ class FsStatWire(TypedDict):
     mode: int
     size: int
     mtimeMs: int
+
+
+class DirentEntryWire(TypedDict):
+    name: str
+    isFile: bool
+    isDirectory: bool
+    isSymbolicLink: bool
 
 
 class BashTransformResultWire(TypedDict):

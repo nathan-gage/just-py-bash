@@ -30,7 +30,7 @@ All listed examples are smoke-tested from the repo root with the same invocation
 | `custom_commands_sync.py` | Python-defined commands, pipelines, nested `ctx.exec(...)`, and built-in composition | Custom commands |
 | `custom_commands_async.py` | Async custom commands with `AsyncBash` and async nested exec | Custom commands |
 | `configuration_and_runtimes.py` | Session options, per-exec overrides, `replace_env`, raw scripts, and optional Python / JavaScript runtimes | Configuration |
-| `filesystem_surfaces.py` | `FileInit`, `LazyFile`, `FsStat`, and the session-bound `bash.fs` API | Filesystem surfaces |
+| `filesystem_surfaces.py` | `FileInit`, `LazyFile`, `FsStat`, `DirentEntry`, and the session-bound `bash.fs` API | Filesystem surfaces |
 | `network_access.py` | Allow-listed network access, method policy, and header transforms using a local HTTP fixture | Network access |
 | `option_hooks.py` | Python callback hooks for `fetch`, `logger`, `trace`, `coverage`, and `defense_in_depth` | Option hooks |
 | `parser_and_command_registry.py` | Upstream command-name helpers plus standalone `parse(...)` / `serialize(...)` | Parser / command registry |

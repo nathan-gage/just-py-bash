@@ -387,6 +387,15 @@ function normalizeFsStat(stat) {
   };
 }
 
+function normalizeDirentEntry(entry) {
+  return {
+    name: typeof entry?.name === 'string' ? entry.name : '',
+    isFile: Boolean(entry?.isFile),
+    isDirectory: Boolean(entry?.isDirectory),
+    isSymbolicLink: Boolean(entry?.isSymbolicLink),
+  };
+}
+
 async function execWithTimeout(bash, script, options) {
   const timeoutMs = options?.timeoutMs;
   const execOptions = { ...options };
@@ -490,12 +499,28 @@ async function runScenario(message) {
           await bash.writeFile(operation.path, decodeBytes(operation.content));
           results.push(wrapSuccess(null));
           break;
+        case 'append_text':
+          await bash.fs.appendFile(resolveSessionPath(bash, operation.path), operation.content);
+          results.push(wrapSuccess(null));
+          break;
+        case 'append_bytes':
+          await bash.fs.appendFile(
+            resolveSessionPath(bash, operation.path),
+            decodeBytes(operation.content),
+          );
+          results.push(wrapSuccess(null));
+          break;
         case 'exists':
           results.push(wrapSuccess(await bash.fs.exists(resolveSessionPath(bash, operation.path))));
           break;
         case 'stat':
           results.push(
             wrapSuccess(normalizeFsStat(await bash.fs.stat(resolveSessionPath(bash, operation.path)))),
+          );
+          break;
+        case 'lstat':
+          results.push(
+            wrapSuccess(normalizeFsStat(await bash.fs.lstat(resolveSessionPath(bash, operation.path)))),
           );
           break;
         case 'mkdir':
@@ -507,6 +532,19 @@ async function runScenario(message) {
         case 'readdir':
           results.push(wrapSuccess(await bash.fs.readdir(resolveSessionPath(bash, operation.path))));
           break;
+        case 'readdir_with_file_types': {
+          if (typeof bash.fs.readdirWithFileTypes !== 'function') {
+            throw new Error('readdirWithFileTypes is not available for this session filesystem');
+          }
+          results.push(
+            wrapSuccess(
+              (await bash.fs.readdirWithFileTypes(resolveSessionPath(bash, operation.path))).map(
+                normalizeDirentEntry,
+              ),
+            ),
+          );
+          break;
+        }
         case 'rm':
           await bash.fs.rm(resolveSessionPath(bash, operation.path), {
             recursive: operation.recursive,
@@ -529,8 +567,30 @@ async function runScenario(message) {
           );
           results.push(wrapSuccess(null));
           break;
+        case 'resolve_path': {
+          const base =
+            typeof operation.base === 'string'
+              ? resolveSessionPath(bash, operation.base)
+              : bash.getCwd();
+          results.push(wrapSuccess(bash.fs.resolvePath(base, operation.path)));
+          break;
+        }
+        case 'get_all_paths':
+          results.push(wrapSuccess(bash.fs.getAllPaths()));
+          break;
         case 'chmod':
           await bash.fs.chmod(resolveSessionPath(bash, operation.path), operation.mode);
+          results.push(wrapSuccess(null));
+          break;
+        case 'symlink':
+          await bash.fs.symlink(operation.target, resolveSessionPath(bash, operation.linkPath));
+          results.push(wrapSuccess(null));
+          break;
+        case 'link':
+          await bash.fs.link(
+            resolveSessionPath(bash, operation.existingPath),
+            resolveSessionPath(bash, operation.newPath),
+          );
           results.push(wrapSuccess(null));
           break;
         case 'readlink':
@@ -538,6 +598,14 @@ async function runScenario(message) {
           break;
         case 'realpath':
           results.push(wrapSuccess(await bash.fs.realpath(resolveSessionPath(bash, operation.path))));
+          break;
+        case 'utimes':
+          await bash.fs.utimes(
+            resolveSessionPath(bash, operation.path),
+            new Date(operation.atimeMs),
+            new Date(operation.mtimeMs),
+          );
+          results.push(wrapSuccess(null));
           break;
         case 'get_env':
           results.push(wrapSuccess(bash.getEnv()));
