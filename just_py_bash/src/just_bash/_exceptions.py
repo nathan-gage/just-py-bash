@@ -16,6 +16,31 @@ class BackendUnavailableError(JustBashError):
     """Raised when the Node.js backend or built just-bash artifact is unavailable."""
 
 
+class UnsupportedRuntimeConfigurationError(JustBashError):
+    """Raised when requested runtime features are incompatible with the resolved backend runtime."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        feature: str,
+        required_version: str | None = None,
+        actual_version: str | None = None,
+        required_platform: str | None = None,
+        actual_platform: str | None = None,
+        configuration: tuple[str, ...] = (),
+        node_command: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(message)
+        self.feature = feature
+        self.required_version = required_version
+        self.actual_version = actual_version
+        self.required_platform = required_platform
+        self.actual_platform = actual_platform
+        self.configuration = configuration
+        self.node_command = node_command
+
+
 class BridgeError(JustBashError):
     """Raised when the Python ↔ Node bridge fails."""
 

@@ -16,6 +16,18 @@ def fake_node_command(script_path: Path) -> list[str]:
     return [sys.executable, str(script_path)]
 
 
+def write_fake_old_node(script_path: Path, *, version: str = "v20.20.2") -> None:
+    script_path.write_text(
+        "from __future__ import annotations\n"
+        "import sys\n"
+        "if '--version' in sys.argv:\n"
+        f"    print({version!r})\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit('fake old node should only be used for --version probing')\n",
+        encoding="utf-8",
+    )
+
+
 def test_bash_from_options_constructs_session() -> None:
     api = public_api()
     options = api.BashOptions(cwd="/workspace", files={"/workspace/seed.txt": "seed\n"})
@@ -50,6 +62,22 @@ def test_bash_raises_backend_unavailable_when_node_command_is_missing() -> None:
         api.Bash(node_command=["/definitely/missing/just-bash-node"])
 
 
+def test_bash_raises_unsupported_runtime_configuration_for_javascript_on_old_node(tmp_path: Path) -> None:
+    api = public_api()
+    fake_node = tmp_path / "old-node.py"
+    write_fake_old_node(fake_node)
+
+    with pytest.raises(api.UnsupportedRuntimeConfigurationError) as exc_info:
+        api.Bash(javascript=True, node_command=fake_node_command(fake_node))
+
+    error = exc_info.value
+    assert error.feature == "javascript"
+    assert error.required_version == "22.6.0"
+    assert error.actual_version == "20.20.2"
+    assert error.node_command == tuple(fake_node_command(fake_node))
+    assert "just-py-bash[node]" in str(error)
+
+
 def test_bash_raises_bridge_error_on_malformed_worker_response(tmp_path: Path) -> None:
     api = public_api()
     worker = tmp_path / "malformed-worker.py"
@@ -60,14 +88,35 @@ def test_bash_raises_bridge_error_on_malformed_worker_response(tmp_path: Path) -
             bash.exec("printf malformed")
 
 
-def test_bash_raises_bridge_timeout_when_worker_stops_responding(tmp_path: Path) -> None:
+def test_bash_returns_timeout_result_when_worker_stops_responding(tmp_path: Path) -> None:
     api = public_api()
     worker = tmp_path / "hanging-worker.py"
     write_fake_backend(worker, mode="hang_on_exec")
 
     with api.Bash(node_command=fake_node_command(worker)) as bash:
-        with pytest.raises(api.BridgeTimeoutError, match="Timed out waiting for just-bash worker response"):
-            bash.exec("printf slow", timeout=0.0)
+        result = bash.exec("printf slow", timeout=0.0)
+
+    assert result.exit_code == 124
+    assert result.stdout == ""
+    assert result.stderr == "bash: execution timeout exceeded after 1ms; session was reset\n"
+    assert result.metadata == {"timed_out": True, "timeout_ms": 1, "session_reset": True}
+
+
+def test_bash_returns_timeout_result_and_recovers_after_exec_timeout(tmp_path: Path) -> None:
+    api = public_api()
+    worker = tmp_path / "timeout-worker.py"
+    write_fake_backend(worker, mode="hang_on_first_exec")
+
+    with api.Bash(node_command=fake_node_command(worker)) as bash:
+        timeout_result = bash.exec("printf slow", timeout=0.0)
+        recovered_result = bash.exec("printf ok")
+
+    assert timeout_result.exit_code == 124
+    assert timeout_result.stdout == ""
+    assert timeout_result.stderr == "bash: execution timeout exceeded after 1ms; session was reset\n"
+    assert timeout_result.metadata == {"timed_out": True, "timeout_ms": 1, "session_reset": True}
+    assert recovered_result.stdout == "recovered\n"
+    assert recovered_result.stderr == ""
 
 
 def test_bash_can_close_cleanly_after_worker_crash(tmp_path: Path) -> None:
@@ -114,6 +163,26 @@ def test_async_bash_raises_backend_unavailable_when_node_command_is_missing() ->
     asyncio.run(exercise())
 
 
+def test_async_bash_raises_unsupported_runtime_configuration_for_javascript_on_old_node(tmp_path: Path) -> None:
+    api = public_api()
+    fake_node = tmp_path / "async-old-node.py"
+    write_fake_old_node(fake_node)
+
+    async def exercise() -> None:
+        with pytest.raises(api.UnsupportedRuntimeConfigurationError) as exc_info:
+            async with api.AsyncBash(javascript=True, node_command=fake_node_command(fake_node)):
+                pass
+
+        error = exc_info.value
+        assert error.feature == "javascript"
+        assert error.required_version == "22.6.0"
+        assert error.actual_version == "20.20.2"
+        assert error.node_command == tuple(fake_node_command(fake_node))
+        assert "just-py-bash[node]" in str(error)
+
+    asyncio.run(exercise())
+
+
 def test_async_bash_raises_bridge_error_on_malformed_worker_response(tmp_path: Path) -> None:
     api = public_api()
     worker = tmp_path / "async-malformed-worker.py"
@@ -123,6 +192,26 @@ def test_async_bash_raises_bridge_error_on_malformed_worker_response(tmp_path: P
         async with api.AsyncBash(node_command=fake_node_command(worker)) as bash:
             with pytest.raises(api.BridgeError, match="Failed to decode just-bash worker response"):
                 await bash.exec("printf malformed")
+
+    asyncio.run(exercise())
+
+
+def test_async_bash_returns_timeout_result_and_recovers_after_exec_timeout(tmp_path: Path) -> None:
+    api = public_api()
+    worker = tmp_path / "async-timeout-worker.py"
+    write_fake_backend(worker, mode="hang_on_first_exec")
+
+    async def exercise() -> None:
+        async with api.AsyncBash(node_command=fake_node_command(worker)) as bash:
+            timeout_result = await bash.exec("printf slow", timeout=0.0)
+            recovered_result = await bash.exec("printf ok")
+
+        assert timeout_result.exit_code == 124
+        assert timeout_result.stdout == ""
+        assert timeout_result.stderr == "bash: execution timeout exceeded after 1ms; session was reset\n"
+        assert timeout_result.metadata == {"timed_out": True, "timeout_ms": 1, "session_reset": True}
+        assert recovered_result.stdout == "recovered\n"
+        assert recovered_result.stderr == ""
 
     asyncio.run(exercise())
 

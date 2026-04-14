@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -15,11 +16,47 @@ from tests.support.harness import (
     run_differential_scenario,
 )
 
+if TYPE_CHECKING:
+    from just_bash import UnsupportedRuntimeConfigurationError
+
 pytestmark = pytest.mark.parity
 
 ScenarioRunner = Callable[..., tuple[dict[str, Any], dict[str, Any]]]
 
 _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE = sys.platform == "win32"
+
+
+def assert_windows_host_filesystem_unsupported(error: Exception, *, expected_kinds: tuple[str, ...]) -> None:
+    api = public_api()
+    assert isinstance(error, api.UnsupportedRuntimeConfigurationError)
+    typed_error = cast("UnsupportedRuntimeConfigurationError", error)
+    assert typed_error.feature == "host_filesystem"
+    assert typed_error.required_platform == "non-Windows"
+    assert typed_error.actual_platform == "win32"
+    assert typed_error.configuration == expected_kinds
+
+
+def assert_windows_host_filesystem_unsupported_for_runner(
+    runner: ScenarioRunner,
+    *,
+    init_kwargs: Mapping[str, object],
+    expected_kinds: tuple[str, ...],
+) -> None:
+    api = public_api()
+    if runner is run_differential_scenario:
+        with pytest.raises(api.UnsupportedRuntimeConfigurationError) as exc_info:
+            with api.Bash(**init_kwargs):
+                pass
+        assert_windows_host_filesystem_unsupported(exc_info.value, expected_kinds=expected_kinds)
+        return
+
+    async def exercise() -> None:
+        with pytest.raises(api.UnsupportedRuntimeConfigurationError) as exc_info:
+            async with api.AsyncBash(**init_kwargs):
+                pass
+        assert_windows_host_filesystem_unsupported(exc_info.value, expected_kinds=expected_kinds)
+
+    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize(
@@ -48,6 +85,14 @@ def test_overlay_fs_matches_upstream_and_keeps_host_files_unchanged(
         op_exec("cat note.txt"),
         op_exec("printf '%s' \"$PWD\""),
     ]
+
+    if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        assert_windows_host_filesystem_unsupported_for_runner(
+            runner,
+            init_kwargs=init_kwargs,
+            expected_kinds=("OverlayFs",),
+        )
+        return
 
     python_result, reference_result = runner(
         init_kwargs=init_kwargs,
@@ -102,6 +147,14 @@ def test_read_write_fs_matches_upstream_and_persists_host_writes(
         op_exec("printf 'new\\n' > created.txt"),
         op_exec("cat created.txt"),
     ]
+
+    if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        assert_windows_host_filesystem_unsupported_for_runner(
+            runner,
+            init_kwargs=init_kwargs,
+            expected_kinds=("ReadWriteFs",),
+        )
+        return
 
     python_result, reference_result = runner(
         init_kwargs=init_kwargs,
@@ -191,6 +244,14 @@ def test_mountable_fs_matches_upstream_for_mixed_mounts_and_cross_mount_copy(
         op_exec("cat copy.txt"),
         op_exec("printf 'blocked\\n' > /mnt/knowledge/guide.txt"),
     ]
+
+    if _WINDOWS_HOST_FS_SEMANTICS_ARE_UPSTREAM_UNSTABLE:
+        assert_windows_host_filesystem_unsupported_for_runner(
+            runner,
+            init_kwargs=init_kwargs,
+            expected_kinds=("OverlayFs", "ReadWriteFs"),
+        )
+        return
 
     python_result, reference_result = runner(
         init_kwargs=init_kwargs,

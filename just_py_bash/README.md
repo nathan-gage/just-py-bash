@@ -37,6 +37,8 @@ uv add 'just-py-bash[node]'
 
 That extra installs the first-party `just-bash-bundled-runtime` companion package.
 
+> `js-exec` / `JavaScriptConfig(...)` require Node.js >= 22.6. If the resolved runtime is older, `just-py-bash` raises `UnsupportedRuntimeConfigurationError` with upgrade guidance. Installing `just-py-bash[node]` satisfies this automatically.
+
 ## Quick Start
 
 ### Synchronous API
@@ -242,6 +244,8 @@ The wrapper now exposes upstream-style init-time filesystem config objects:
 - `OverlayFs(root=..., mount_point=..., read_only=...)`
 - `ReadWriteFs(root=...)`
 - `MountableFs(base=..., mounts=[MountConfig(...)])`
+
+> On Windows, host-backed filesystem configs (`OverlayFs`, `ReadWriteFs`, and `MountableFs` containing those) raise `UnsupportedRuntimeConfigurationError`. Upstream `just-bash` host filesystem semantics are currently unstable on Windows, so `just-py-bash` fails early with a clear explanation instead of letting file operations silently misbehave. Use `InMemoryFs`, avoid host-backed mounts, or run under WSL / another POSIX environment.
 
 `files=` and `InMemoryFs(files=...)` both support richer initial values too:
 
@@ -578,6 +582,8 @@ By default the package uses its vendored `just-bash` runtime and resolves Node.j
 2. `JUST_BASH_NODE`
 3. the first-party bundled Node provider installed by `just-py-bash[node]`
 4. a system `node` on `PATH`
+
+When `javascript=True` or `JavaScriptConfig(...)` is enabled, the resolved Node.js runtime must be at least 22.6 because upstream `just-bash`'s `js-exec` worker depends on `node:module.stripTypeScriptTypes`. If the resolved runtime is too old, the wrapper raises `UnsupportedRuntimeConfigurationError` before opening the session and suggests upgrading Node, installing `just-py-bash[node]`, or overriding `node_command=`.
 
 To point at a different `just-bash` backend artifact, set:
 

@@ -28,6 +28,7 @@ from ._exceptions import (
     BridgeTimeoutError,
     CommandFailedError,
     JustBashError,
+    UnsupportedRuntimeConfigurationError,
 )
 from ._fs import FileInit, FsStat, InMemoryFs, LazyFile, MountableFs, MountConfig, OverlayFs, ReadWriteFs
 from ._models import ExecResult, ExecutionLimits, JavaScriptConfig
@@ -86,6 +87,7 @@ __all__ = [
     "AsyncSandboxCommand",
     "BackendError",
     "BackendUnavailableError",
+    "UnsupportedRuntimeConfigurationError",
     "BashOptions",
     "BashTransformPipeline",
     "BashTransformResult",
@@ -151,7 +153,7 @@ def _run_cli_with_error_handling(
 ) -> int:
     try:
         return runner(argv)
-    except BackendUnavailableError as exc:
+    except (BackendUnavailableError, UnsupportedRuntimeConfigurationError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
