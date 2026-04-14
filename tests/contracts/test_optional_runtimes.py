@@ -183,6 +183,99 @@ def test_async_packaged_runtime_fetch_hook_round_trips_through_javascript(
     asyncio.run(exercise())
 
 
+def test_async_packaged_runtime_matches_downstream_javascript_bootstrap_scenario(
+    monkeypatch: MonkeyPatch,
+    packaged_runtime_artifacts: tuple[str, str],
+) -> None:
+    use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
+    api = public_api()
+    AsyncBash = api.AsyncBash
+    JavaScriptConfig = api.JavaScriptConfig
+
+    async def exercise() -> None:
+        async with AsyncBash(
+            python=True,
+            javascript=JavaScriptConfig(bootstrap="globalThis.answer = 42;"),
+            commands=["echo"],
+        ) as bash:
+            echo_result = await bash.exec("echo allowed", timeout=60)
+            cat_result = await bash.exec("cat missing.txt", timeout=60)
+            python_result = await bash.exec('python -c "print(2 + 3)"', timeout=60)
+            javascript_result = await bash.exec('js-exec -c "console.log(globalThis.answer)"', timeout=60)
+
+        assert echo_result.stdout == "allowed\n"
+        assert cat_result.exit_code == 127
+        assert cat_result.stderr == "bash: cat: command not found\n"
+        assert python_result.stdout == "5\n"
+        assert javascript_result.stdout == "42\n"
+
+    asyncio.run(exercise())
+
+
+def test_async_packaged_runtime_matches_downstream_fetch_logger_and_coverage_scenario(
+    monkeypatch: MonkeyPatch,
+    packaged_runtime_artifacts: tuple[str, str],
+) -> None:
+    use_packaged_runtime(monkeypatch, packaged_runtime_artifacts)
+    api = public_api()
+    AsyncBash = api.AsyncBash
+    FetchResult = api.FetchResult
+
+    class Logger:
+        def __init__(self) -> None:
+            self.events: list[tuple[str, str, object | None]] = []
+
+        def info(self, message: str, data: object | None = None) -> None:
+            self.events.append(("info", message, data))
+
+        def debug(self, message: str, data: object | None = None) -> None:
+            self.events.append(("debug", message, data))
+
+    class Coverage:
+        def __init__(self) -> None:
+            self.hits: list[str] = []
+
+        def hit(self, feature: str) -> None:
+            self.hits.append(feature)
+
+    async def exercise() -> None:
+        logger = Logger()
+        coverage = Coverage()
+        fetch_requests: list[tuple[str, str]] = []
+
+        async def fetch(request: Any) -> object:
+            fetch_requests.append((request.method, request.url))
+            return FetchResult(
+                status=200,
+                status_text="OK",
+                headers={"content-type": "text/plain"},
+                body="hooked fetch",
+                url=request.url,
+            )
+
+        async with AsyncBash(
+            javascript=True,
+            fetch=fetch,
+            logger=logger,
+            coverage=coverage,
+        ) as bash:
+            echo_result = await bash.exec("echo hello", timeout=60)
+            fetch_result = await bash.exec(
+                "js-exec -c \"fetch('https://example.test/data').then(r=>r.text()).then(t=>console.log(t))\"",
+                timeout=60,
+            )
+
+        assert echo_result.stdout == "hello\n"
+        assert fetch_result.stdout == "hooked fetch\n"
+        assert fetch_requests == [("GET", "https://example.test/data")]
+        assert any(level == "info" and message == "exec" for level, message, _ in logger.events)
+        assert any(level == "info" and message == "exit" for level, message, _ in logger.events)
+        assert any(level == "debug" and message == "stdout" for level, message, _ in logger.events)
+        assert coverage.hits
+
+    asyncio.run(exercise())
+
+
 def test_packaged_runtime_option_hooks_work_with_coverage_enabled(
     monkeypatch: MonkeyPatch,
     packaged_runtime_artifacts: tuple[str, str],
