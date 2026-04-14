@@ -26,12 +26,18 @@ class UnsupportedRuntimeConfigurationError(JustBashError):
         feature: str,
         required_version: str | None = None,
         actual_version: str | None = None,
+        required_platform: str | None = None,
+        actual_platform: str | None = None,
+        configuration: tuple[str, ...] = (),
         node_command: tuple[str, ...] = (),
     ) -> None:
         super().__init__(message)
         self.feature = feature
         self.required_version = required_version
         self.actual_version = actual_version
+        self.required_platform = required_platform
+        self.actual_platform = actual_platform
+        self.configuration = configuration
         self.node_command = node_command
 
 

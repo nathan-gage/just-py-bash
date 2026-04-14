@@ -245,6 +245,8 @@ The wrapper now exposes upstream-style init-time filesystem config objects:
 - `ReadWriteFs(root=...)`
 - `MountableFs(base=..., mounts=[MountConfig(...)])`
 
+> On Windows, host-backed filesystem configs (`OverlayFs`, `ReadWriteFs`, and `MountableFs` containing those) raise `UnsupportedRuntimeConfigurationError`. Upstream `just-bash` host filesystem semantics are currently unstable on Windows, so `just-py-bash` fails early with a clear explanation instead of letting file operations silently misbehave. Use `InMemoryFs`, avoid host-backed mounts, or run under WSL / another POSIX environment.
+
 `files=` and `InMemoryFs(files=...)` both support richer initial values too:
 
 - plain text / bytes

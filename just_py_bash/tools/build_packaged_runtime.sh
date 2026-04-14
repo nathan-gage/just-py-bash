@@ -7,8 +7,8 @@ VENDOR_DIR="$ROOT/vendor/just-bash"
 OUT_DIR="${JUST_BASH_PACKAGED_RUNTIME_OUT_DIR:-$PACKAGE_DIR/src/just_bash/_vendor/just-bash}"
 OUT_PARENT=$(dirname "$OUT_DIR")
 mkdir -p "$OUT_PARENT"
-STAGING_DIR=$(mktemp -d "$OUT_PARENT/.just-bash-staging.XXXXXX")
 TMP_DIR=$(mktemp -d)
+STAGING_DIR=$(mktemp -d "$TMP_DIR/.just-bash-staging.XXXXXX")
 trap 'rm -rf "$TMP_DIR" "$STAGING_DIR"' EXIT
 
 if [[ ! -d "$VENDOR_DIR" ]]; then

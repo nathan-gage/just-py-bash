@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import shlex
 import subprocess
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -10,8 +11,10 @@ from typing import TYPE_CHECKING
 
 from ._bridge import resolve_node_command
 from ._exceptions import BackendUnavailableError, UnsupportedRuntimeConfigurationError
+from ._fs import MountableFs, OverlayFs, ReadWriteFs
 
 if TYPE_CHECKING:
+    from ._fs import FileSystemConfig
     from ._options import BashOptions
 
 
@@ -37,6 +40,54 @@ class _NodeVersion:
 
 
 _MIN_JAVASCRIPT_RUNTIME_NODE = _NodeVersion(22, 6, 0)
+
+
+def _current_platform() -> str:
+    return sys.platform
+
+
+def _collect_host_backed_filesystem_kinds(filesystem: FileSystemConfig) -> tuple[str, ...]:
+    kinds: set[str] = set()
+
+    def collect(candidate: FileSystemConfig) -> None:
+        if isinstance(candidate, OverlayFs):
+            kinds.add("OverlayFs")
+            return
+        if isinstance(candidate, ReadWriteFs):
+            kinds.add("ReadWriteFs")
+            return
+        if isinstance(candidate, MountableFs):
+            if candidate.base is not None:
+                collect(candidate.base)
+            if candidate.mounts is not None:
+                for mount in candidate.mounts:
+                    collect(mount.filesystem)
+
+    collect(filesystem)
+    return tuple(sorted(kinds))
+
+
+def _ensure_filesystem_configuration_supported(options: BashOptions) -> None:
+    if options.fs is None or _current_platform() != "win32":
+        return
+
+    host_backed_kinds = _collect_host_backed_filesystem_kinds(options.fs)
+    if not host_backed_kinds:
+        return
+
+    configurations = ", ".join(host_backed_kinds)
+    raise UnsupportedRuntimeConfigurationError(
+        (
+            "The requested just-py-bash host-backed filesystem configuration is not supported on Windows. "
+            f"{configurations} rely on upstream just-bash host filesystem semantics, which are currently unstable on Windows "
+            "and can silently report incorrect file state. Use `InMemoryFs`, avoid host-backed mounts, or run this workload "
+            "under WSL or another POSIX environment."
+        ),
+        feature="host_filesystem",
+        required_platform="non-Windows",
+        actual_platform="win32",
+        configuration=host_backed_kinds,
+    )
 
 
 @lru_cache(maxsize=32)
@@ -71,6 +122,7 @@ def ensure_runtime_configuration_supported(
     *,
     node_command: Sequence[str] | None = None,
 ) -> None:
+    _ensure_filesystem_configuration_supported(options)
     if not options.javascript:
         return
 
