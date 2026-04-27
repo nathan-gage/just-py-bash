@@ -42,7 +42,7 @@ jobs:
           cache-suffix: release
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v5.0.0
+        uses: pnpm/action-setup@v6.0.3
         with:
           version: 8.15.9
 
