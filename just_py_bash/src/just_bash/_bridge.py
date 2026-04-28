@@ -193,9 +193,11 @@ def resolve_backend_artifacts(
 
     package_dir = Path(__file__).resolve().parent
     repo_root = package_dir.parents[2]
+    repo_vendor_root = repo_root / "vendor" / "just-bash"
     candidate_roots = [
         package_dir / "_vendor" / "just-bash",
-        repo_root / "vendor" / "just-bash",
+        repo_vendor_root / "packages" / "just-bash",
+        repo_vendor_root,
     ]
 
     candidate_entries = ("dist/index.js", "dist/bundle/index.js")

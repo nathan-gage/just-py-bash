@@ -173,11 +173,16 @@ def resolve_backend_artifacts() -> BackendArtifacts:
         return BackendArtifacts(js_entry=js_entry, package_json=package_json)
 
     vendor_root = ROOT / "vendor" / "just-bash"
-    package_json = vendor_root / "package.json"
-    for rel in ("dist/index.js", "dist/bundle/index.js"):
-        js_entry = vendor_root / rel
-        if js_entry.exists() and package_json.exists():
-            return BackendArtifacts(js_entry=js_entry.resolve(), package_json=package_json.resolve())
+    candidate_roots = (
+        vendor_root / "packages" / "just-bash",
+        vendor_root,
+    )
+    for root in candidate_roots:
+        package_json = root / "package.json"
+        for rel in ("dist/index.js", "dist/bundle/index.js"):
+            js_entry = root / rel
+            if js_entry.exists() and package_json.exists():
+                return BackendArtifacts(js_entry=js_entry.resolve(), package_json=package_json.resolve())
 
     raise AssertionError(
         "Could not locate a built just-bash artifact for reference testing. "

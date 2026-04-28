@@ -22,8 +22,10 @@ PACKAGED_BACKEND_ROOT = PACKAGE_ROOT / "src" / "just_bash" / "_vendor" / "just-b
 
 
 def resolve_reference_cli_entry(relative_path: str) -> Path:
+    vendor_root = ROOT / "vendor" / "just-bash"
     candidates = [
-        ROOT / "vendor" / "just-bash" / relative_path,
+        vendor_root / "packages" / "just-bash" / relative_path,
+        vendor_root / relative_path,
         PACKAGED_BACKEND_ROOT / relative_path,
     ]
     for candidate in candidates:
