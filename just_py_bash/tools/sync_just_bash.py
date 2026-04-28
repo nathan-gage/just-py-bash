@@ -7,10 +7,14 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import cast
 
 ROOT = Path(__file__).resolve().parents[2]
 SUBMODULE = ROOT / "vendor" / "just-bash"
-PACKAGE_JSON = SUBMODULE / "package.json"
+PACKAGE_JSON_PATHS = (
+    Path("package.json"),
+    Path("packages/just-bash/package.json"),
+)
 
 
 def run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -32,20 +36,66 @@ def write_output(name: str, value: str) -> None:
         handle.write(f"{name}={value}\n")
 
 
-def read_upstream_version() -> str:
-    payload = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))
+def read_version_from_package_json(payload_text: str, *, source: str) -> str | None:
+    raw_payload = json.loads(payload_text)
+    if not isinstance(raw_payload, dict):
+        raise RuntimeError(f"Could not read just-bash version from {source}")
+    payload = cast("dict[str, object]", raw_payload)
+
+    if payload.get("name") != "just-bash":
+        return None
+
     version = payload.get("version")
     if not isinstance(version, str):
-        raise RuntimeError(f"Could not read just-bash version from {PACKAGE_JSON}")
+        raise RuntimeError(f"Could not read just-bash version from {source}")
     return version
+
+
+def read_upstream_version_from_checkout(checkout: Path) -> str:
+    checked_paths: list[str] = []
+    for relative_path in PACKAGE_JSON_PATHS:
+        package_json = checkout / relative_path
+        checked_paths.append(str(package_json))
+        if not package_json.is_file():
+            continue
+
+        version = read_version_from_package_json(package_json.read_text(encoding="utf-8"), source=str(package_json))
+        if version is not None:
+            return version
+
+    raise RuntimeError(f"Could not read just-bash version; checked: {', '.join(checked_paths)}")
+
+
+def read_upstream_version() -> str:
+    return read_upstream_version_from_checkout(SUBMODULE)
+
+
+def read_file_at_ref(ref: str, relative_path: Path) -> str | None:
+    completed = subprocess.run(
+        ["git", "show", f"{ref}:{relative_path.as_posix()}"],
+        cwd=SUBMODULE,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    return completed.stdout
 
 
 def read_upstream_version_at(ref: str) -> str:
-    payload = json.loads(run(["git", "show", f"{ref}:package.json"], cwd=SUBMODULE).stdout)
-    version = payload.get("version")
-    if not isinstance(version, str):
-        raise RuntimeError(f"Could not read just-bash version from {ref}:package.json")
-    return version
+    checked_paths: list[str] = []
+    for relative_path in PACKAGE_JSON_PATHS:
+        checked_paths.append(f"{ref}:{relative_path.as_posix()}")
+        payload_text = read_file_at_ref(ref, relative_path)
+        if payload_text is None:
+            continue
+
+        version = read_version_from_package_json(payload_text, source=f"{ref}:{relative_path.as_posix()}")
+        if version is not None:
+            return version
+
+    raise RuntimeError(f"Could not read just-bash version; checked: {', '.join(checked_paths)}")
 
 
 def git(*args: str, cwd: Path) -> str:
