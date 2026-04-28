@@ -53,6 +53,7 @@ class JustBashBuildHook(BuildHookInterface):
 
 def source_vendor_checkout_build_ready(project_root: Path) -> bool:
     vendor_root = project_root.parent / "vendor" / "just-bash"
+    package_root = source_vendor_package_root(vendor_root)
     required_files = (
         "package.json",
         "dist/index.js",
@@ -61,8 +62,26 @@ def source_vendor_checkout_build_ready(project_root: Path) -> bool:
         "src/commands/python3/worker.js",
     )
     return (
-        all(vendor_root.joinpath(relative_path).is_file() for relative_path in required_files)
+        all(package_root.joinpath(relative_path).is_file() for relative_path in required_files)
+        and source_vendor_js_exec_worker_ready(package_root)
         and vendor_root.joinpath("node_modules").is_dir()
+    )
+
+
+def source_vendor_package_root(vendor_root: Path) -> Path:
+    package_root = vendor_root / "packages" / "just-bash"
+    if package_root.joinpath("package.json").is_file():
+        return package_root
+    return vendor_root
+
+
+def source_vendor_js_exec_worker_ready(package_root: Path) -> bool:
+    return any(
+        package_root.joinpath(relative_path).is_file()
+        for relative_path in (
+            "src/commands/js-exec/js-exec-worker.ts",
+            "src/commands/js-exec/worker.ts",
+        )
     )
 
 

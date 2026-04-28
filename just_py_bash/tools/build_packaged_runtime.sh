@@ -4,6 +4,10 @@ set -euo pipefail
 PACKAGE_DIR=$(cd "$(dirname "$0")/.." && pwd)
 ROOT=$(cd "$PACKAGE_DIR/.." && pwd)
 VENDOR_DIR="$ROOT/vendor/just-bash"
+VENDOR_PACKAGE_DIR="$VENDOR_DIR"
+if [[ -f "$VENDOR_DIR/packages/just-bash/package.json" ]]; then
+  VENDOR_PACKAGE_DIR="$VENDOR_DIR/packages/just-bash"
+fi
 OUT_DIR="${JUST_BASH_PACKAGED_RUNTIME_OUT_DIR:-$PACKAGE_DIR/src/just_bash/_vendor/just-bash}"
 OUT_PARENT=$(dirname "$OUT_DIR")
 mkdir -p "$OUT_PARENT"
@@ -16,26 +20,36 @@ if [[ ! -d "$VENDOR_DIR" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$VENDOR_DIR/dist/index.js" ]]; then
-  echo "Missing built vendor/just-bash dist/index.js" >&2
+if [[ ! -f "$VENDOR_PACKAGE_DIR/dist/index.js" ]]; then
+  echo "Missing built just-bash package dist/index.js at $VENDOR_PACKAGE_DIR" >&2
   echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
   exit 1
 fi
 
-if [[ ! -f "$VENDOR_DIR/dist/bin/just-bash.js" ]]; then
-  echo "Missing built vendor/just-bash dist/bin/just-bash.js" >&2
+if [[ ! -f "$VENDOR_PACKAGE_DIR/dist/bin/just-bash.js" ]]; then
+  echo "Missing built just-bash package dist/bin/just-bash.js at $VENDOR_PACKAGE_DIR" >&2
   echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
   exit 1
 fi
 
-if [[ ! -f "$VENDOR_DIR/dist/bin/shell/shell.js" ]]; then
-  echo "Missing built vendor/just-bash dist/bin/shell/shell.js" >&2
+if [[ ! -f "$VENDOR_PACKAGE_DIR/dist/bin/shell/shell.js" ]]; then
+  echo "Missing built just-bash package dist/bin/shell/shell.js at $VENDOR_PACKAGE_DIR" >&2
   echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
   exit 1
 fi
 
-if [[ ! -f "$VENDOR_DIR/src/commands/python3/worker.js" ]]; then
-  echo "Missing built vendor/just-bash python worker" >&2
+if [[ ! -f "$VENDOR_PACKAGE_DIR/src/commands/python3/worker.js" ]]; then
+  echo "Missing built just-bash package python worker at $VENDOR_PACKAGE_DIR" >&2
+  echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
+  exit 1
+fi
+
+JS_EXEC_WORKER_TS="src/commands/js-exec/js-exec-worker.ts"
+if [[ ! -f "$VENDOR_PACKAGE_DIR/$JS_EXEC_WORKER_TS" ]]; then
+  JS_EXEC_WORKER_TS="src/commands/js-exec/worker.ts"
+fi
+if [[ ! -f "$VENDOR_PACKAGE_DIR/$JS_EXEC_WORKER_TS" ]]; then
+  echo "Missing just-bash package js-exec worker source at $VENDOR_PACKAGE_DIR" >&2
   echo "Run: (cd vendor/just-bash && pnpm install && pnpm build)" >&2
   exit 1
 fi
@@ -43,12 +57,12 @@ fi
 PACKAGE_VERSION=$(python - <<PY
 import json
 from pathlib import Path
-print(json.loads(Path(r"$VENDOR_DIR/package.json").read_text())["version"])
+print(json.loads(Path(r"$VENDOR_PACKAGE_DIR/package.json").read_text())["version"])
 PY
 )
 
 resolve_cpython_assets() {
-  local source_dir="$VENDOR_DIR/vendor/cpython-emscripten"
+  local source_dir="$VENDOR_PACKAGE_DIR/vendor/cpython-emscripten"
   local wasm_file="$source_dir/python.wasm"
 
   if [[ -f "$wasm_file" ]] && file "$wasm_file" | grep -q 'WebAssembly'; then
@@ -78,10 +92,10 @@ resolve_quickjs_wasm() {
 }
 
 mkdir -p "$TMP_DIR/runtime/dist/bundle/chunks"
-cp -R "$VENDOR_DIR/dist/bin" "$TMP_DIR/runtime/dist/bin"
+cp -R "$VENDOR_PACKAGE_DIR/dist/bin" "$TMP_DIR/runtime/dist/bin"
 
 (
-  cd "$VENDOR_DIR"
+  cd "$VENDOR_PACKAGE_DIR"
   npx esbuild dist/index.js \
     --bundle \
     --splitting \
@@ -133,10 +147,10 @@ replacement = f'''if (ctx.coverage) {{
 index_path.write_text(flag_coverage_pattern.sub(replacement, index_text, count=1))
 PY
 
-cp "$VENDOR_DIR/src/commands/python3/worker.js" "$TMP_DIR/runtime/dist/bundle/chunks/worker.js"
+cp "$VENDOR_PACKAGE_DIR/src/commands/python3/worker.js" "$TMP_DIR/runtime/dist/bundle/chunks/worker.js"
 (
-  cd "$VENDOR_DIR"
-  npx esbuild src/commands/js-exec/worker.ts \
+  cd "$VENDOR_PACKAGE_DIR"
+  npx esbuild "$JS_EXEC_WORKER_TS" \
     --bundle \
     --platform=node \
     --format=esm \
@@ -150,7 +164,7 @@ cp -R "$TMP_DIR/cpython-emscripten" "$TMP_DIR/runtime/vendor/cpython-emscripten"
 
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
-cp "$VENDOR_DIR/package.json" "$STAGING_DIR/package.json"
+cp "$VENDOR_PACKAGE_DIR/package.json" "$STAGING_DIR/package.json"
 cp -R "$TMP_DIR/runtime/dist" "$STAGING_DIR/dist"
 cp -R "$TMP_DIR/runtime/vendor" "$STAGING_DIR/vendor"
 rm -rf "$OUT_DIR"
