@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import tools.release_metadata as release_metadata
 from tools.release_metadata import (
     BUNDLED_RUNTIME,
     JUST_PY_BASH,
@@ -14,6 +15,29 @@ from tools.release_metadata import (
 )
 
 pytestmark = pytest.mark.contract
+
+
+def write_package_json(path: Path, *, name: str, version: str | None = None) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    version_field = "" if version is None else f', "version": "{version}"'
+    path.write_text(f'{{"name": "{name}"{version_field}}}\n', encoding="utf-8")
+
+
+def test_just_py_bash_release_version_supports_upstream_monorepo_layout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root_package_json = tmp_path / "package.json"
+    package_package_json = tmp_path / "packages" / "just-bash" / "package.json"
+    write_package_json(root_package_json, name="just-bash-monorepo")
+    write_package_json(package_package_json, name="just-bash", version="2.14.3")
+    monkeypatch.setattr(
+        release_metadata,
+        "JUST_BASH_PACKAGE_JSON_CANDIDATES",
+        [root_package_json, package_package_json],
+    )
+
+    assert read_target_base_version(JUST_PY_BASH) == "2.14.3"
 
 
 def test_just_py_bash_release_tag_matches_vendored_version() -> None:
