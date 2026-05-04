@@ -91,6 +91,17 @@ resolve_quickjs_wasm() {
   printf '%s' "$wasm_path"
 }
 
+resolve_sql_wasm() {
+  local wasm_path
+  wasm_path=$(find "$VENDOR_DIR/node_modules" -path '*/sql.js/dist/sql-wasm.wasm' | head -n 1)
+  if [[ -z "$wasm_path" ]]; then
+    echo "Could not find sql.js sql-wasm.wasm in vendor/just-bash/node_modules" >&2
+    echo "Run: (cd vendor/just-bash && pnpm install)" >&2
+    exit 1
+  fi
+  printf '%s' "$wasm_path"
+}
+
 mkdir -p "$TMP_DIR/runtime/dist/bundle/chunks"
 cp -R "$VENDOR_PACKAGE_DIR/dist/bin" "$TMP_DIR/runtime/dist/bin"
 
@@ -157,6 +168,26 @@ cp "$VENDOR_PACKAGE_DIR/src/commands/python3/worker.js" "$TMP_DIR/runtime/dist/b
     --outfile="$TMP_DIR/runtime/dist/bundle/chunks/js-exec-worker.js"
 )
 cp "$(resolve_quickjs_wasm)" "$TMP_DIR/runtime/dist/bundle/chunks/emscripten-module.wasm"
+
+# sqlite3 was inlined in the main bundle prior to just-bash 2.14.4. Starting in
+# 2.14.4 it runs in a worker thread, so the bundle needs a sibling sqlite3-worker.js
+# (with sql.js inlined since the wheel ships no node_modules) and sql-wasm.wasm.
+SQLITE3_WORKER_TS="src/commands/sqlite3/worker.ts"
+if [[ -f "$VENDOR_PACKAGE_DIR/$SQLITE3_WORKER_TS" ]]; then
+  # The banner restores a working `require` for sql.js, which is CJS and uses
+  # dynamic `require("node:fs")` — esbuild's default __require shim throws on
+  # dynamic specifiers when emitting ESM.
+  (
+    cd "$VENDOR_PACKAGE_DIR"
+    npx esbuild "$SQLITE3_WORKER_TS" \
+      --bundle \
+      --platform=node \
+      --format=esm \
+      --banner:js='import { createRequire as __jpbCreateRequire } from "node:module"; import { fileURLToPath as __jpbFileURLToPath } from "node:url"; import { dirname as __jpbDirname } from "node:path"; const require = __jpbCreateRequire(import.meta.url); const __filename = __jpbFileURLToPath(import.meta.url); const __dirname = __jpbDirname(__filename);' \
+      --outfile="$TMP_DIR/runtime/dist/bundle/chunks/sqlite3-worker.js"
+  )
+  cp "$(resolve_sql_wasm)" "$TMP_DIR/runtime/dist/bundle/chunks/sql-wasm.wasm"
+fi
 
 resolve_cpython_assets
 mkdir -p "$TMP_DIR/runtime/vendor"
