@@ -37,7 +37,7 @@ function emitCustomCommandInvocation(name, args, ctx) {
       context: {
         cwd: ctx.cwd,
         env: Object.fromEntries(ctx.env),
-        stdin: ctx.stdin,
+        stdin: decodeCustomCommandStdin(ctx.stdin),
       },
     })}\n`,
   );
@@ -128,6 +128,16 @@ function decodeBytes(value) {
 
 function encodeBytes(value) {
   return { [BYTE_TAG]: Buffer.from(value).toString('base64') };
+}
+
+function decodeCustomCommandStdin(value) {
+  if (
+    backendModule &&
+    typeof backendModule.decodeBytesToUtf8 === 'function'
+  ) {
+    return backendModule.decodeBytesToUtf8(value);
+  }
+  return typeof value === 'string' ? value : '';
 }
 
 function decodeFileContent(value) {
