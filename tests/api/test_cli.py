@@ -50,11 +50,12 @@ class InteractiveSessionResult:
     transcript: str
 
 
-def existing_pythonpath_entries(env: dict[str, str]) -> list[Path]:
-    raw = env.get("PYTHONPATH", "")
-    if not raw:
-        return []
-    return [Path(entry) for entry in raw.split(os.pathsep) if entry]
+def source_cli_env(env_overrides: dict[str, str] | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
+    env["PYTHONPATH"] = str(PACKAGE_SRC)
+    return env
 
 
 def packaged_backend_env() -> dict[str, str]:
@@ -85,15 +86,10 @@ def run_source_cli(
     cwd: Path | None = None,
     env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
-    if env_overrides:
-        env.update(env_overrides)
-    pythonpath = os.pathsep.join(str(entry) for entry in [PACKAGE_SRC, *existing_pythonpath_entries(env)])
-    env["PYTHONPATH"] = pythonpath
     return subprocess.run(
         [sys.executable, "-c", CLI_BOOTSTRAP, *args],
         cwd=ROOT if cwd is None else cwd,
-        env=env,
+        env=source_cli_env(env_overrides),
         input=stdin,
         text=True,
         capture_output=True,
@@ -107,15 +103,10 @@ def run_source_shell_cli(
     cwd: Path | None = None,
     env_overrides: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
-    if env_overrides:
-        env.update(env_overrides)
-    pythonpath = os.pathsep.join(str(entry) for entry in [PACKAGE_SRC, *existing_pythonpath_entries(env)])
-    env["PYTHONPATH"] = pythonpath
     return subprocess.run(
         [sys.executable, "-c", SHELL_BOOTSTRAP, *args],
         cwd=ROOT if cwd is None else cwd,
-        env=env,
+        env=source_cli_env(env_overrides),
         input=stdin,
         text=True,
         capture_output=True,
@@ -128,15 +119,10 @@ def popen_source_cli(
     cwd: Path | None = None,
     env_overrides: dict[str, str] | None = None,
 ) -> subprocess.Popen[str]:
-    env = os.environ.copy()
-    if env_overrides:
-        env.update(env_overrides)
-    pythonpath = os.pathsep.join(str(entry) for entry in [PACKAGE_SRC, *existing_pythonpath_entries(env)])
-    env["PYTHONPATH"] = pythonpath
     return subprocess.Popen(
         [sys.executable, "-c", CLI_BOOTSTRAP, *args],
         cwd=ROOT if cwd is None else cwd,
-        env=env,
+        env=source_cli_env(env_overrides),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -309,15 +295,10 @@ def run_source_shell_cli_interactive(
     env_overrides: dict[str, str] | None = None,
     steps: list[InteractiveStep],
 ) -> InteractiveSessionResult:
-    env = os.environ.copy()
-    if env_overrides:
-        env.update(env_overrides)
-    pythonpath = os.pathsep.join(str(entry) for entry in [PACKAGE_SRC, *existing_pythonpath_entries(env)])
-    env["PYTHONPATH"] = pythonpath
     return run_interactive_process(
         [sys.executable, "-c", SHELL_BOOTSTRAP, *args],
         cwd=cwd,
-        env=env,
+        env=source_cli_env(env_overrides),
         steps=steps,
     )
 
