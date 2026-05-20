@@ -47,7 +47,7 @@ pattern-prefix = "runtime/"
 fallback-version = "22.22.2"
 
 [tool.just-bash-bundled-runtime]
-node-version = "22.22.2"
+node-version = "22.22.3"
 target-major = 22
 
 [tool.hatch.build]
