@@ -7,7 +7,7 @@ dependencies = []
 [dependency-groups]
 dev = [
   "coverage[toml]>=7.14.1",
-  "hypothesis>=6.152.9",
+  "hypothesis>=6.155.1",
   "pydantic>=2.13.4",
   "pytest>=9.0.0",
   "pytest-xdist>=3.6.1",
@@ -15,8 +15,8 @@ dev = [
 ]
 lint = [
   "mypy>=2.1.0",
-  "pyright>=1.1.409",
-  "ruff>=0.15.14",
+  "pyright>=1.1.410",
+  "ruff>=0.15.15",
   "taplo>=0.9.3",
   "yamlfix>=1.19.1",
 ]
