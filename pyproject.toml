@@ -15,8 +15,8 @@ dev = [
 ]
 lint = [
   "mypy>=2.1.0",
-  "pyright>=1.1.410",
-  "ruff>=0.15.18",
+  "pyright>=1.1.411",
+  "ruff>=0.15.20",
   "taplo>=0.9.3",
   "yamlfix>=1.19.1",
 ]
