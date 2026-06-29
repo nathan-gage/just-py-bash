@@ -217,7 +217,7 @@ jobs:
 
       - name: Restore cached bundled runtime payload
         id: runtime-cache
-        uses: actions/cache@v5.0.5
+        uses: actions/cache@v6.1.0
         with:
           path: |
             just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime
@@ -675,7 +675,7 @@ jobs:
       - name: Restore cached bundled runtime payload
         if: matrix.os != 'ubuntu-latest'
         id: runtime-cache
-        uses: actions/cache@v5.0.5
+        uses: actions/cache@v6.1.0
         with:
           path: |
             just_bash_bundled_runtime/src/just_bash_bundled_runtime/runtime
